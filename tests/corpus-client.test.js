@@ -112,7 +112,21 @@ test('dispose terminates the worker and rejects pending and future work', async 
   assert.equal(workers[0].terminated, true);
   await assert.rejects(store.query(), /종료|disposed/i);
   await assert.rejects(store.getRecord('first'), /종료|disposed/i);
+  await assert.rejects(store.locate({ id: 'first' }), /종료|disposed/i);
   await assert.rejects(store.getManifest(), /종료|disposed/i);
+});
+
+test('locate routes only its target and filter context to the worker and correlates its reply', async () => {
+  const { store, workers } = setup();
+  const worker = await ready(store, workers);
+  assert.equal(typeof store.locate, 'function');
+  const pending = store.locate({ id: 'first', q: '문자', collection: 'a', sort: 'desc' });
+  await tick();
+  const request = worker.sent.find(item => item.type === 'locate');
+  assert.deepEqual(request.payload, { id: 'first', q: '문자', collection: 'a', sort: 'desc' });
+  worker.reply(request, { index: 9, total: 30, record: fixtureRecord });
+  assert.deepEqual(await pending, { index: 9, total: 30, record: fixtureRecord });
+  await store.dispose();
 });
 
 test('manifest network errors retry and unsupported workers return an actionable error', async () => {
@@ -170,6 +184,8 @@ test('real worker decompresses a gzip fixture, answers query/get, and retries af
     assert.equal(result.items[0].originalDate, '1446-99-99');
     assert.equal((await request(4, 'get', { id: 'first' })).result.sourceUrl, fixtureRecord.sourceUrl);
     assert.equal((await request(5, 'get', { id: 'missing' })).result, null);
+    const located = (await request(6, 'locate', { year: 1445 })).result;
+    assert.deepEqual([located.index, located.total, located.record.id], [0, 1, 'first']);
   } finally {
     globalThis.self = originalSelf;
     globalThis.fetch = originalFetch;

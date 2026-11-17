@@ -13,7 +13,7 @@
 <body>
   <a href="#chronicle" class="skip-link">역사 설명으로 건너뛰기</a>
   <header class="header">
-    <a class="brand" href="#balhae-698" aria-label="산하 처음으로"><span class="brand-seal" aria-hidden="true">山河</span><span class="brand-word">산하<small>한국사 시공간 지도</small></span></a>
+    <a class="brand" href="#records" aria-label="산하 전체 기록 처음으로"><span class="brand-seal" aria-hidden="true">山河</span><span class="brand-word">산하<small>한국사 시공간 지도</small></span></a>
     <div class="header-caption">시간을 따라, 땅 위의 역사를 읽다<span>AN ATLAS OF KOREAN HISTORY</span></div>
     <nav class="header-actions" aria-label="도구">
       <button class="header-button" id="corpus-open"><span aria-hidden="true">≡</span><span>자료 연표 <small id="corpus-count"></small></span></button>
@@ -37,6 +37,7 @@
         <g id="map-camera"><g id="land-layer" aria-hidden="true"></g><g id="geo-labels" aria-hidden="true"></g><g id="route-layer" aria-hidden="true"></g><g id="marker-layer"></g><g id="figure-route-layer"></g></g>
       </svg>
       <p class="map-load-status" id="map-load-status" role="status">해안선 지도를 불러오는 중입니다…</p>
+      <div class="record-map-note" id="record-map-note" hidden><span class="eyebrow">기록과 공간</span><strong>이 기록의 지도 좌표는 확인되지 않았습니다.</strong><p>원자료의 날짜·내용·출처를 읽을 수 있습니다. 위치를 확인한 장면은 ‘지도 해설’에서 살펴보세요.</p><button class="text-button" id="record-scenes-open">가까운 시기의 지도 해설 ↗</button></div>
       <div class="map-layers"><label><input type="checkbox" id="capitals-toggle" checked><span class="legend-diamond">◆</span> 수도·거점</label><label><input type="checkbox" id="events-toggle" checked><span class="legend-dot">●</span> 사건</label><label><input type="checkbox" id="routes-toggle">천도 연결선</label></div>
       <div class="map-legend" id="map-legend" aria-label="정치체 범례"></div>
       <div class="map-controls" role="group" aria-label="지도 확대와 축소"><button id="zoom-in" aria-label="지도 확대">+</button><button id="zoom-out" aria-label="지도 축소">−</button><span></span><button id="map-reset" aria-label="지도 원래 위치" title="지도 원래 위치">⌖</button></div>
@@ -47,16 +48,29 @@
     </section>
 
     <aside class="chronicle" id="chronicle" tabindex="-1" aria-label="선택한 시대의 역사">
-      <div class="chronicle-topline"><span class="eyebrow">시대의 기록</span><span id="snapshot-counter">01 / 20</span></div>
+      <div class="chronicle-topline"><span class="eyebrow" id="browse-counter-label">기록 탐색</span><span id="snapshot-counter" role="status">—</span></div>
+      <div id="record-controls" class="record-controls" hidden>
+        <details class="record-filter-disclosure"><summary>검색·자료군·연도 범위</summary>
+        <form id="main-record-filters" class="main-record-filters">
+          <label for="record-query">기록에서 찾기<input id="record-query" type="search" placeholder="제목·초록·날짜 검색" autocomplete="off"></label>
+          <label for="record-collection">자료군<select id="record-collection"><option value="all">전체 자료군</option></select></label>
+          <label for="record-sort">순서<select id="record-sort"><option value="asc">오래된 기록부터</option><option value="desc">최근 기록부터</option></select></label>
+          <div class="record-filter-range"><label for="record-from">시작 연도<input id="record-from" type="number" placeholder="기원전은 음수"></label><label for="record-to">마지막 연도<input id="record-to" type="number" placeholder="전체 기간"></label></div>
+          <div class="record-filter-actions"><button type="submit">조건 적용</button><button type="button" id="record-reset">전체 기록</button></div>
+        </form></details>
+        <form id="record-position-form" class="record-position-form"><label for="record-position">선택한 목록의 기록 번호</label><input id="record-position" type="number" min="1" value="1" required><button type="submit">이동 ↵</button></form>
+      </div>
       <p class="chronicle-date" id="chronicle-date"></p>
       <h2 id="chronicle-title"></h2>
       <p class="chronicle-kicker" id="chronicle-kicker"></p>
       <div class="section-rule"><span></span><i>◆</i><span></span></div>
       <p class="chronicle-summary" id="chronicle-summary"></p>
       <div class="historical-note" id="historical-note"></div>
-      <div id="scene-tags" class="scene-tags" aria-label="이 장면의 주제"></div>
-      <div class="scene-statistics" id="atlas-statistics"></div>
-      <div class="corpus-summary" id="corpus-summary"><span>공식 자료로 더 깊이 읽기</span><button class="text-button" id="scene-corpus-open">공식 자료 연표 살펴보기 ↗</button><p>기록에 수록된 날짜·초록·문헌 표기와 원문을 함께 확인합니다.</p></div>
+      <div id="record-content" class="main-record-content" hidden></div>
+      <div id="scene-tags" class="scene-tags scene-only" aria-label="이 장면의 주제"></div>
+      <div class="scene-statistics scene-only" id="atlas-statistics"></div>
+      <div class="corpus-summary scene-only" id="corpus-summary"><span>공식 자료로 더 깊이 읽기</span><button class="text-button" id="scene-corpus-open">전체 기록을 메인에서 읽기 ↗</button><p>기록에 수록된 날짜·초록·문헌 표기와 원문을 함께 확인합니다.</p></div>
+      <div id="scene-reading" class="scene-only">
       <div class="sidebar-tabs" role="tablist" aria-label="기록 종류"><button id="events-tab" role="tab" aria-selected="true" aria-controls="events-content">주요 사건</button><button id="details-tab" role="tab" aria-selected="false" aria-controls="details-content" tabindex="-1">시대 해설</button><button id="places-tab" role="tab" aria-selected="false" aria-controls="places-content" tabindex="-1">지명</button><button id="people-tab" role="tab" aria-selected="false" aria-controls="people-content" tabindex="-1">인물</button></div>
       <div id="events-content" role="tabpanel" aria-labelledby="events-tab"></div>
       <div id="details-content" role="tabpanel" aria-labelledby="details-tab" hidden></div>
@@ -64,24 +78,26 @@
       <div id="people-content" role="tabpanel" aria-labelledby="people-tab" hidden></div>
       <div class="scene-guide-links"><button class="text-button" id="scene-timeline-open">전체 연표에서 살펴보기 ↗</button><button class="text-button" id="scene-polities-open">정치체별 개관 ↗</button></div>
       <div class="snapshot-sources"><span class="eyebrow">이 장면의 근거</span><div id="snapshot-sources"></div></div>
+      </div>
       <div class="chronicle-footer">사료를 바탕으로 읽고,<br>불확실한 것은 함께 남깁니다.</div>
     </aside>
   </main>
 
   <footer class="timeline" aria-label="역사 시간축">
+    <div class="browse-mode-bar"><div class="browse-mode-switch" role="group" aria-label="탐색 자료 선택"><button id="browse-records" aria-pressed="true">전체 기록 <span id="record-mode-count"></span></button><button id="browse-scenes" aria-pressed="false">지도 해설 <span id="scene-mode-count"></span></button></div><p id="browse-mode-description" class="browse-mode-description">공식 연표의 개별 기록을 탐색합니다.</p></div>
     <div class="timeline-top"><div class="timeline-label"><span class="eyebrow">시간의 흐름</span><span id="timeline-range"></span></div><div class="timeline-help">시대를 선택하거나 시간을 움직여 보세요 <span aria-hidden="true">↔</span></div><button id="share-button" class="text-button">현재 장면 링크 <span aria-hidden="true">↗</span></button></div>
     <nav id="era-nav" class="era-nav" aria-label="시대 선택"></nav>
     <div class="playback-row">
       <div class="playback-controls"><button class="icon-button" id="previous" aria-label="이전 장면">Ⅰ‹</button><button class="play-button" id="play" aria-label="시간 자동 재생">▶</button><button class="icon-button" id="next" aria-label="다음 장면">›Ⅰ</button></div>
       <form id="year-form" class="year-form"><label for="year-input" class="sr-only">이동할 연도, 기원전은 음수</label><input id="year-input" type="number" min="-108" max="1987" value="698" required aria-describedby="year-help"><button type="submit" aria-label="입력한 연도로 이동">년 ↵</button></form>
-      <div class="slider-wrap"><label class="sr-only" for="time-slider">역사 장면 선택</label><input id="time-slider" type="range" min="0" max="19" step="1" value="0"><div class="slider-labels"><span id="first-year">기원전 108년</span><span id="year-help">기록된 대표 시점 사이를 이동합니다</span><span id="last-year">1987년</span></div></div>
+      <div class="slider-wrap"><label class="sr-only" for="time-slider" id="slider-label">역사 기록 선택</label><input id="time-slider" type="range" min="0" max="0" step="1" value="0"><div class="slider-labels"><span id="first-year"></span><span id="year-help">선택한 목록의 기록을 하나씩 이동합니다</span><span id="last-year"></span></div></div>
       <div class="playback-speed"><label for="speed" class="sr-only">재생 간격</label><select id="speed"><option value="3500">3.5초</option><option value="6000">6초</option><option value="10000">10초</option></select></div>
     </div>
     <div class="timeline-bottom"><span>山河 <span class="dot-separator">·</span> 한국사의 시간과 공간</span><span>← → 장면 이동 <span class="dot-separator">·</span> Space 재생 <span class="dot-separator">·</span> / 검색</span><button class="text-button" id="method-open">표현 원칙 및 프로젝트 정보</button></div>
   </footer>
 
   <dialog id="search-dialog" class="search-dialog"><div class="dialog-top"><span class="eyebrow">역사를 찾아서</span><button class="icon-button" data-close aria-label="검색 닫기">×</button></div><label for="search-input" class="sr-only">시대, 사건, 지명 검색</label><input type="search" id="search-input" placeholder="시대, 사건, 옛 지명과 오늘의 지명" autocomplete="off"><p class="search-hint" id="search-hint">‘발해’, ‘한양’, ‘독립’을 찾아보세요.</p><button class="text-button" id="search-corpus-open">공식 자료 연표에서 검색 ↗</button><div id="search-results" aria-live="polite"></div></dialog>
-  <dialog id="sources-dialog" class="sources-dialog"><div class="dialog-top"><span class="eyebrow">기록을 읽는 방법</span><button class="icon-button" data-close aria-label="자료와 출처 닫기">×</button></div><h2>출처가 있는 역사,<br>여지를 남기는 지도.</h2><p>산하는 한국사의 대표 장면을 공식 역사 자료와 함께 살펴보는 지도입니다. 각 사건의 출처를 열어 원문을 확인할 수 있습니다.</p><div class="method-grid"><div><h3>시간</h3><p>연속된 매년의 상태를 복원한 자료가 아닙니다. 입력한 연도에 앞서는 가장 가까운 대표 시점을 보여주며, 실제 표시 연도를 명시합니다. 기원전은 음수로 입력합니다.</p></div><div><h3>공간</h3><p>현대 해안선에 수도·유적·사건의 개략 위치를 표시합니다. 점과 천도 연결선은 영토·국경·당시의 도로를 뜻하지 않습니다. 인물 경로도 확인된 활동 지점의 연대순 연결입니다. 가까운 표식은 원래 위치에서 가는 선을 이어 분리합니다. 위치가 불확실한 장소는 설명에 남깁니다.</p></div><div><h3>서술</h3><p>건국 전승과 역사적 확인을 구분하고, 같은 시기에 존재한 정치체를 함께 다룹니다. 정치·전쟁뿐 아니라 문화·사회·외교의 변화를 함께 읽습니다.</p></div></div><h3>역사 자료</h3><label class="source-filter-label" for="source-filter">원문 제목·기관으로 찾기</label><input type="search" id="source-filter" class="explorer-search" placeholder="예: 훈민정음, 국가기록원"><p id="source-count" class="catalogue-meta" role="status"></p><div id="all-sources" class="all-sources"></div><h3>프로젝트와 지리 자료</h3><p>지도 해설은 직접 작성한 한국사 요약입니다. 자료 연표는 공개 메타데이터의 출처와 재사용 조건을 별도로 표시합니다.</p><p>공식 자료 연표: <a href="https://www.data.go.kr/data/15051036/fileData.do" target="_blank" rel="noopener noreferrer">교육부 국사편찬위원회 · 한국역사자료 메타데이터 정보_연표</a>, <a href="https://www.kogl.or.kr/info/licenseType1.do" target="_blank" rel="noopener noreferrer">공공누리 제1유형(출처표시)</a>. 메타데이터의 이용허락을 별도 원문·이미지의 조건으로 확대하지 않습니다.</p><p>해안선: <a href="https://www.naturalearthdata.com/about/terms-of-use/" target="_blank" rel="noopener noreferrer">Natural Earth · Public Domain</a>. 세부 출처와 검증 기준은 저장소 문서를 참조하세요.</p></dialog>
+  <dialog id="sources-dialog" class="sources-dialog"><div class="dialog-top"><span class="eyebrow">기록을 읽는 방법</span><button class="icon-button" data-close aria-label="자료와 출처 닫기">×</button></div><h2>출처가 있는 역사,<br>여지를 남기는 지도.</h2><p>산하는 한국사의 대표 장면을 공식 역사 자료와 함께 살펴보는 지도입니다. 각 사건의 출처를 열어 원문을 확인할 수 있습니다.</p><div class="method-grid"><div><h3>시간</h3><p>전체 기록에서는 같은 해의 기록도 각각 넘겨보며, 연도 이동은 현재 조건에서 가장 가까운 수록 연도의 첫 기록을 찾습니다. 지도 해설에서는 입력 연도에 앞서는 대표 시점을 보여줍니다. 연속된 매년의 상태를 복원한 자료가 아니며 실제 표시 연도를 명시합니다. 기원전은 음수로 입력합니다.</p></div><div><h3>공간</h3><p>현대 해안선에 수도·유적·사건의 개략 위치를 표시합니다. 점과 천도 연결선은 영토·국경·당시의 도로를 뜻하지 않습니다. 인물 경로도 확인된 활동 지점의 연대순 연결입니다. 가까운 표식은 원래 위치에서 가는 선을 이어 분리합니다. 위치가 불확실한 장소는 설명에 남깁니다.</p></div><div><h3>서술</h3><p>건국 전승과 역사적 확인을 구분하고, 같은 시기에 존재한 정치체를 함께 다룹니다. 정치·전쟁뿐 아니라 문화·사회·외교의 변화를 함께 읽습니다.</p></div></div><h3>역사 자료</h3><label class="source-filter-label" for="source-filter">원문 제목·기관으로 찾기</label><input type="search" id="source-filter" class="explorer-search" placeholder="예: 훈민정음, 국가기록원"><p id="source-count" class="catalogue-meta" role="status"></p><div id="all-sources" class="all-sources"></div><h3>프로젝트와 지리 자료</h3><p>지도 해설은 직접 작성한 한국사 요약입니다. 자료 연표는 공개 메타데이터의 출처와 재사용 조건을 별도로 표시합니다.</p><p>공식 자료 연표: <a href="https://www.data.go.kr/data/15051036/fileData.do" target="_blank" rel="noopener noreferrer">교육부 국사편찬위원회 · 한국역사자료 메타데이터 정보_연표</a>, <a href="https://www.kogl.or.kr/info/licenseType1.do" target="_blank" rel="noopener noreferrer">공공누리 제1유형(출처표시)</a>. 메타데이터의 이용허락을 별도 원문·이미지의 조건으로 확대하지 않습니다.</p><p>해안선: <a href="https://www.naturalearthdata.com/about/terms-of-use/" target="_blank" rel="noopener noreferrer">Natural Earth · Public Domain</a>. 세부 출처와 검증 기준은 저장소 문서를 참조하세요.</p></dialog>
   <div id="toast" class="toast" role="status" hidden></div>
   <noscript><div class="noscript">지도의 시대 선택과 검색을 사용하려면 JavaScript를 켜주세요.</div></noscript>
 </body>

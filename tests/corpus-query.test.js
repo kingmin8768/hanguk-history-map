@@ -85,3 +85,33 @@ test('pagination reuses normalized search fields without rereading or serializin
   assert.equal(records[0].title, '검증 ＡＢＣ');
   assert.equal(records[0].originalDate, '미상 ９９월');
 });
+
+test('locate finds the exact row inside the same filtered and ordered chronology as query', () => {
+  const corpus = index([
+    record('late-a', 1446, { title: '문자 기록', collectionId: 'letters' }),
+    record('early', 1000, { title: '문자 기록', collectionId: 'letters' }),
+    record('late-b', 1446, { title: '문자 기록', collectionId: 'letters' }),
+    record('excluded', 1446, { title: '문자 기록', collectionId: 'other' })
+  ]);
+  assert.equal(typeof corpus.locate, 'function');
+  const options = { q: '문자', collection: 'letters', fromYear: 1000, sort: 'desc' };
+  const located = corpus.locate({ ...options, id: 'late-b' });
+  assert.deepEqual([located.index, located.total, located.record.id], [1, 3, 'late-b']);
+  assert.equal(located.record, corpus.query(options).items[1]);
+  assert.equal(corpus.locate({ ...options, id: 'excluded' }), null);
+  assert.equal(corpus.locate({ id: 'missing' }), null);
+  assert.equal(corpus.locate({ id: 'missing', year: 1446 }), null);
+});
+
+test('year locate chooses the nearest known year with earlier-year ties and first same-year metadata row', () => {
+  const corpus = index([record('unknown', null), record('late-a', 1200), record('early-a', 1000), record('early-b', 1000), record('late-b', 1200), record('bce', -57)]);
+  assert.equal(typeof corpus.locate, 'function');
+  assert.deepEqual([corpus.locate({ year: 1100 }).index, corpus.locate({ year: 1100 }).record.id], [1, 'early-a']);
+  assert.deepEqual([corpus.locate({ year: 1100, sort: 'desc' }).index, corpus.locate({ year: 1100, sort: 'desc' }).record.id], [2, 'early-a']);
+  assert.equal(corpus.locate({ year: 1199 }).record.id, 'late-a');
+  assert.equal(corpus.locate({ year: -100 }).record.id, 'bce');
+  assert.equal(corpus.locate({ year: 0 }), null);
+  assert.equal(corpus.locate({ year: 1.5 }), null);
+  assert.equal(corpus.locate({ year: 1100, fromYear: 1101 }).record.id, 'late-a');
+  assert.equal(corpus.locate({ year: 1100, q: 'unknown' }), null);
+});

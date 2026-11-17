@@ -1,4 +1,5 @@
 import { buildCityHistories, filterTimeline, CATEGORY_LABELS } from './catalogue.js';
+import { createRecordPresentation } from './main-record-view.js';
 
 const SECTIONS = { timeline: '전체 연표', polities: '정치체', figures: '인물', places: '도시 기록', records: '자료 연표' };
 const yearLabel = year => year < 0 ? `기원전 ${Math.abs(year)}년` : `${year}년`;
@@ -6,7 +7,10 @@ const searchable = value => String(value ?? '').normalize('NFKC').toLocaleLowerC
 const sectionText = entity => (entity.sections || []).flatMap(section => [section.heading, section.body]);
 const validStop = stop => Number.isInteger(stop.year) && stop.year !== 0 && Array.isArray(stop.coord) && stop.coord.length === 2 && stop.coord.every(Number.isFinite) && Math.abs(stop.coord[0]) <= 180 && Math.abs(stop.coord[1]) <= 90 && (stop.sourceIds || []).length > 0;
 
-export function createExplorer({ document: doc, snapshots = [], eras = [], sources = [], figures = [], polities = [], corpus, onSelectSnapshot = () => {}, onRoute = () => {}, onClearRoute = () => {}, onOpenPlace } = {}) {
+export function createExplorer({ document: doc, snapshots = [], eras = [], sources = [], figures = [], polities = [], corpus, onSelectSnapshot = () => {}, onRoute = () => {}, onClearRoute = () => {}, onOpenPlace, onOpenRecord } = {}) {
+  const recordPresentation = createRecordPresentation(doc);
+  const recordDateNote = recordPresentation.dateNote;
+  const appendRecordCurrentSource = recordPresentation.appendCurrentSource;
   const cities = buildCityHistories(snapshots);
   const sourceMap = new Map(sources.map(source => [source.id, source]));
   const eraLabels = new Map(eras.map(era => [era.id, era.label]));
@@ -168,6 +172,19 @@ export function createExplorer({ document: doc, snapshots = [], eras = [], sourc
     if (place && typeof onOpenPlace === 'function') onOpenPlace(place);
     close();
   }
+  function appendMainRecordAction(record, target) {
+    if (typeof onOpenRecord !== 'function') return;
+    const actions = element('div', 'explorer-actions');
+    const main = button('메인에서 보기', '', () => {
+      const options = recordQueryOptions();
+      if (options.error) return;
+      const context = { q: options.q, collection: options.collection, fromYear: options.fromYear, toYear: options.toYear, sort: options.sort };
+      close();
+      onOpenRecord(record, context);
+    });
+    main.dataset.action = 'open-main-record';
+    actions.append(main); target.append(actions);
+  }
   function sourceLinks(ids, target) {
     const wrapper = element('div', 'detail-sources');
     for (const id of new Set(ids || [])) {
@@ -196,8 +213,8 @@ export function createExplorer({ document: doc, snapshots = [], eras = [], sourc
     const selected = [...select.options].find(option => option.value === value);
     if (selected) selected.selected = true;
   }
-  function defaultRecordFilters(q = '') {
-    Object.assign(recordFilters, { q, collection: 'all', fromYear: '', toYear: '', sort: 'asc' });
+  function defaultRecordFilters(q = '', context = {}) {
+    Object.assign(recordFilters, { q, collection: context.collection || 'all', fromYear: context.fromYear == null ? '' : String(context.fromYear), toYear: context.toYear == null ? '' : String(context.toYear), sort: context.sort === 'desc' ? 'desc' : 'asc' });
     search.value = q;
     for (const [key, input] of corpusInputs) {
       if (input.tagName === 'SELECT') selectValue(input, recordFilters[key]);
@@ -228,62 +245,8 @@ export function createExplorer({ document: doc, snapshots = [], eras = [], sourc
     if (fromYear !== null && toYear !== null && fromYear > toYear) return { error: '시작 연도는 끝 연도보다 늦을 수 없습니다.' };
     return { q: recordFilters.q, collection: recordFilters.collection, fromYear, toYear, offset: recordState.offset, limit: recordState.limit, sort: recordFilters.sort };
   }
-  function recordLink(label, value, hosts, prefix = '/') {
-    let url;
-    try { url = new URL(value); } catch { return null; }
-    if (url.protocol !== 'https:' || url.username || url.password || url.port || !hosts.includes(url.hostname) || !url.pathname.startsWith(prefix)) return null;
-    const link = element('a', 'source-link', `${label} ↗`);
-    link.href = url.href; link.target = '_blank'; link.rel = 'noopener noreferrer';
-    return link;
-  }
   function appendRecordProvenance() {
-    const dataset = manifest?.dataset || { title: '한국역사자료 메타데이터 정보 연표', provider: '국사편찬위원회', landingUrl: 'https://www.data.go.kr/data/15051036/fileData.do', license: { name: '공공누리 제1유형', url: 'https://www.kogl.or.kr/info/licenseType1.do' } };
-    const box = element('aside', 'corpus-provenance');
-    box.setAttribute('aria-label', '자료 제공과 이용 조건');
-    box.append(element('p', '', `${dataset.provider || '국사편찬위원회'} · ${dataset.title || '공식 자료 연표'}`));
-    box.append(element('p', '', '제공기관의 메타데이터와 초록을 수록했습니다. 이 자료 목록은 새로 작성한 해설이 아닙니다. 짧거나 잘린 제공 제목도 원문 그대로 표시합니다.'));
-    box.append(element('p', '', '날짜는 원자료의 연대 표기입니다. 자료에는 분류 연대와 전승·관련 기록이 섞여 있어, 표시된 연도가 사건의 확정 발생 연도라는 뜻은 아닙니다.'));
-    box.append(element('p', '', '공식 링크는 자료 서비스 개편으로 달라질 수 있으며, 모든 개별 기록의 현재 본문 연결을 대조한 것은 아닙니다. 개별 주소를 확인할 수 없는 기록은 해당 자료군에 연결합니다.'));
-    const license = dataset.license || {};
-    const attribution = element('p', '', [license.name || '공공누리 제1유형', license.attribution].filter(Boolean).join(' · '));
-    box.append(attribution);
-    const landing = recordLink('공공데이터 원본·이용 조건', dataset.landingUrl, ['www.data.go.kr', 'data.go.kr', 'www.history.go.kr', 'history.go.kr', 'db.history.go.kr']);
-    const licenseLink = recordLink('공공누리 제1유형 안내', license.url, ['www.kogl.or.kr', 'kogl.or.kr']);
-    if (landing) box.append(landing);
-    if (licenseLink) box.append(licenseLink);
-    const recordCount = manifest?.recordCount ?? manifest?.counts?.records ?? manifest?.counts?.recordCount;
-    if (Number.isFinite(recordCount)) box.append(element('p', 'catalogue-meta', `공식 자료 기록 ${recordCount.toLocaleString('ko-KR')}건 · 직접 작성한 지도 해설 ${snapshots.length}개와 별도 자료입니다. 페이지당 최대 50건 표시`));
-    panel.append(box);
-  }
-  function recordDateNote(record) {
-    const notes = [record.calendar === 'lunar' ? '음력' : '역법 미표기'];
-    if (/(?:^|[-./\s])99(?=$|[-./\s])|99[월일]/.test(String(record.originalDate || ''))) notes.push('원문 날짜의 99는 월·일 미상 표기입니다. 실제 월일로 읽지 않습니다.');
-    else if (record.precision === 'year') notes.push('월·일 미상');
-    else if (record.precision === 'month') notes.push('일 미상');
-    else if (record.precision === 'unknown') notes.push('날짜 정밀도 미상');
-    const numericMonth = String(record.originalDate || '').match(/^-?\d{1,6}-(\d{1,2})(?:-|$)/)?.[1];
-    if (numericMonth !== undefined && Number(numericMonth) !== 99 && (Number(numericMonth) < 1 || Number(numericMonth) > 12)) notes.push('원자료에 일반적인 월 범위를 벗어난 표기가 있어, 월일을 확정 날짜로 해석하지 않고 연도만 연대 검색에 사용합니다.');
-    if (record.year === -2333) notes.push('원자료에서 기원전 2333년으로 분류된 전승·관련 기록이며 그해 발생한 확정 사건이라는 의미가 아닙니다.');
-    return notes.join(' · ');
-  }
-  function appendRecordCurrentSource(record, target, showRecordId = false) {
-    const collection = record.sourceLinkType === 'collection';
-    let allowedCollection = false;
-    if (collection) {
-      try {
-        const url = new URL(record.sourceUrl);
-        allowedCollection = !url.hash && ((url.pathname === '/diachronic/level.do' && url.search === '?itemId=tcmd') || (url.pathname === '/id/tcmd' && !url.search));
-      } catch { /* Only the known official collection roots qualify for the exception. */ }
-    }
-    const current = collection
-      ? allowedCollection && recordLink('공식 자료군에서 원문 찾기', record.sourceUrl, ['db.history.go.kr'])
-      : recordLink('공식 원문 현재 링크', record.sourceUrl, ['db.history.go.kr'], '/id/');
-    if (current) target.append(current);
-    else target.append(element('p', '', '현재 원문의 안전한 공식 링크를 확인할 수 없습니다.'));
-    if (collection) {
-      target.append(element('p', 'corpus-link-note', '서비스 개편으로 이 기록의 개별 기사 주소를 확인할 수 없어 해당 자료군에 연결합니다. 제공기관 기록 ID로 찾아보세요.'));
-      if (showRecordId && record.sourceRecordId) target.append(element('p', 'catalogue-meta', `제공기관 기록 ID: ${record.sourceRecordId}`));
-    }
+    recordPresentation.appendProvenance(manifest, panel, { sceneCount: snapshots.length, showPageSize: true });
   }
   function recordLoading(message) {
     panel.setAttribute('aria-busy', 'true');
@@ -298,11 +261,8 @@ export function createExplorer({ document: doc, snapshots = [], eras = [], sourc
     return error;
   }
   function recordRequestError(failure, message, retry) {
-    if (['CORPUS_WORKER_UNSUPPORTED', 'CORPUS_DECOMPRESSION_UNSUPPORTED'].includes(failure?.code)) {
-      const error = recordError('현재 브라우저에서는 자료 검색을 지원하지 않습니다. 최신 브라우저에서 다시 열거나 공식 원문 사이트를 이용해 주세요.');
-      const source = recordLink('국사편찬위원회 한국사데이터베이스', 'https://db.history.go.kr/', ['db.history.go.kr']);
-      if (source) error.append(source);
-    } else recordError(message, retry);
+    const block = recordPresentation.appendFailure(panel, failure, message, retry);
+    count.textContent = block.querySelector('p').textContent;
   }
   function loadManifest() {
     if (!corpus || destroyed) return;
@@ -369,6 +329,7 @@ export function createExplorer({ document: doc, snapshots = [], eras = [], sourc
     count.textContent = '공식 자료 기록 상세';
     const detail = detailBase(record.title || '제목 미제공', '제공 제목 · 공식 자료 기록');
     detail.classList.add('corpus-detail');
+    appendMainRecordAction(record, detail);
     const date = element('section', 'detail-section');
     date.append(element('h4', '', '원자료의 연대 표기와 자료 구분'), element('p', 'corpus-original-date', `원자료의 연대 표기: ${record.originalDate || '표기 없음'}`), element('p', 'corpus-date-note', recordDateNote(record)), element('p', '', `자료 구분: ${collectionLabel(record.collectionId)}`));
     if (record.sourceRecordId) date.append(element('p', 'catalogue-meta', `제공기관 기록 ID: ${record.sourceRecordId}`));
@@ -378,14 +339,7 @@ export function createExplorer({ document: doc, snapshots = [], eras = [], sourc
     detail.append(bodySection);
     const links = element('section', 'detail-section detail-sources'); links.append(element('h4', '', record.sourceLinkType === 'collection' ? '공식 자료군' : '공식 원문'));
     appendRecordCurrentSource(record, links);
-    if (record.originalMetadataUrl) {
-      const metadata = element('details', 'corpus-metadata');
-      metadata.append(element('summary', '', '기존 메타데이터 연계주소 (보존)'), element('p', '', '이전 서비스의 연계주소를 보존한 정보입니다. 현재 열리지 않을 수 있으므로 위의 공식 자료 연결을 이용하세요.'));
-      const original = recordLink('보존된 기존 연계주소', record.originalMetadataUrl, ['db.history.go.kr']);
-      if (original) metadata.append(original);
-      metadata.append(element('p', 'corpus-metadata-path', record.originalMetadataUrl));
-      links.append(metadata);
-    }
+    recordPresentation.appendMetadata(record, links);
     detail.append(links);
     const context = element('section', 'detail-section'); context.append(element('h4', '', '지도 해설과 함께 읽기'));
     const hasYear = Number.isSafeInteger(record.year) && record.year !== 0;
@@ -442,6 +396,7 @@ export function createExplorer({ document: doc, snapshots = [], eras = [], sourc
       const snippet = chars.length ? chars.slice(0, 180).join('') + (chars.length > 180 ? '…' : '') : '제공된 초록·본문이 없습니다.';
       content.append(element('p', 'catalogue-meta', `제공 제목 · ${collectionLabel(record.collectionId)}`), heading, element('p', 'corpus-snippet', snippet), element('p', 'corpus-date-note', recordDateNote(record)));
       appendRecordCurrentSource(record, content, true);
+      appendMainRecordAction(record, content);
       row.append(content); list.append(row);
     }
     panel.append(list, recordPagination());
@@ -644,6 +599,11 @@ export function createExplorer({ document: doc, snapshots = [], eras = [], sourc
     defaultRecordFilters(String(q ?? ''));
     open('records', null, recordFilters.q);
   }
+  function openRecord(id, context = {}) {
+    if (destroyed) return;
+    defaultRecordFilters(String(context.q ?? ''), context);
+    open('records', id ?? null, recordFilters.q);
+  }
   function destroy() {
     if (destroyed) return;
     close(); destroyed = true;
@@ -652,5 +612,5 @@ export function createExplorer({ document: doc, snapshots = [], eras = [], sourc
     dialog.remove();
   }
   if (corpus) loadManifest();
-  return { open, close, refresh, destroy, searchRecords };
+  return { open, close, refresh, destroy, searchRecords, openRecord };
 }

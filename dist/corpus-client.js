@@ -108,6 +108,7 @@ export function createCorpusStore({ fetchResource = (...args) => globalThis.fetc
   return {
     getManifest,
     async query(options = {}) { return request(await ensureLoaded(), 'query', options); },
+    async locate(options = {}) { return request(await ensureLoaded(), 'locate', options); },
     async getRecord(id) { return request(await ensureLoaded(), 'get', { id }); },
     async dispose() {
       if (disposed) return;

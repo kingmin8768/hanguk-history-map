@@ -8,11 +8,11 @@ const figures = [{ id: 'sejong', name: '세종', years: '1397~1450', role: '조�
 const polities = [{ id: 'joseon', name: '조선', period: '1392~1897', summary: '한양을 중심으로 이어진 왕조.', capitalNames: ['개경', '한양'], sections: [{ heading: '제도', body: '정치 제도를 정비했다.', sourceIds: ['safe'] }, { heading: '사회', body: '사회의 변화가 이어졌다.', sourceIds: ['safe'] }], sourceIds: ['safe', 'unsafe'] }];
 const snapshots = [{ id: 'foundation', year: 1394, era: 'joseon', title: '한양 천도', summary: '도읍을 옮겼다.', note: '', tags: ['천도'], sections: [{ heading: '도시', body: '새 도성의 구상', sourceIds: ['safe'] }], events: [{ year: 1394, title: '천도', description: '한양으로 이전', category: 'politics', sourceIds: ['safe'] }], figureIds: [], polityIds: ['joseon'], sourceIds: ['safe'], places: [{ id: 'hanyang', name: '한양', modernName: '서울', polity: '조선', note: '도시 단위의 개략 위치', coord: [127, 37], sourceIds: ['safe'] }] }, { id: 'letters', year: 1446, era: 'joseon', title: '훈민정음 반포', summary: '글자를 알렸다.', note: '', tags: ['문자'], sections: [], events: [{ year: 1446, title: '해례본', description: '소리와 문자', category: 'culture', sourceIds: ['safe'] }], figureIds: ['sejong'], polityIds: ['joseon'], sourceIds: ['safe'], places: [{ id: 'seoul', name: '서울', modernName: '서울', polity: '조선', note: '한양 일대', coord: [127, 37], sourceIds: ['safe'] }] }];
 
-function setup({ sceneData = snapshots, corpus } = {}) {
+function setup({ sceneData = snapshots, corpus, onOpenRecord } = {}) {
   assert.equal(typeof module.createExplorer, 'function');
   const { document, window } = parseHTML('<html><body><button id="launch">탐색 열기</button></body></html>');
   const selections = []; const routes = []; const openedPlaces = []; let cleared = 0;
-  const explorer = module.createExplorer({ document, snapshots: sceneData, eras: [{ id: 'joseon', label: '조선 전기' }], sources, figures, polities, corpus, onSelectSnapshot: id => selections.push(id), onRoute: figure => routes.push(figure), onClearRoute: () => cleared++, onOpenPlace: place => openedPlaces.push(place) });
+  const explorer = module.createExplorer({ document, snapshots: sceneData, eras: [{ id: 'joseon', label: '조선 전기' }], sources, figures, polities, corpus, onOpenRecord, onSelectSnapshot: id => selections.push(id), onRoute: figure => routes.push(figure), onClearRoute: () => cleared++, onOpenPlace: place => openedPlaces.push(place) });
   return { explorer, document, window, selections, routes, openedPlaces, get cleared() { return cleared; } };
 }
 const findButton = (document, text) => [...document.querySelectorAll('button')].find(button => button.textContent.includes(text));
@@ -440,4 +440,58 @@ test('collection-root exceptions reject extra parameters, other item IDs, and un
     assert.equal(Boolean(document.querySelector('.corpus-record a')), false, sourceUrl);
     explorer.destroy();
   }
+});
+
+test('record cards and details open the main view after closing and preserve their current filter context', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const corpus = fixtureCorpus();
+  const opened = []; const order = [];
+  const { explorer, document, window } = setup({ corpus: corpus.api, onOpenRecord: (record, filters) => { order.push('main'); opened.push({ record, filters }); assert.equal(document.querySelector('#explorer-dialog').hasAttribute('open'), false); } });
+  const launch = document.querySelector('#launch'); launch.focus = () => order.push('focus restored');
+  Object.defineProperty(document, 'activeElement', { configurable: true, get: () => launch });
+  explorer.open('records'); await settle();
+  const collection = document.querySelector('[data-corpus-filter="collection"]'); selectOption(collection, 'b'); collection.dispatchEvent(new window.Event('change')); await settle();
+  const from = document.querySelector('[data-corpus-filter="fromYear"]'); const to = document.querySelector('[data-corpus-filter="toYear"]');
+  from.value = '1450'; to.value = '1456'; from.dispatchEvent(new window.Event('input')); to.dispatchEvent(new window.Event('input'));
+  const sort = document.querySelector('[data-corpus-filter="sort"]'); selectOption(sort, 'desc'); sort.dispatchEvent(new window.Event('change')); await settle();
+  const search = document.querySelector('.explorer-search'); search.value = '제공 제목'; search.dispatchEvent(new window.Event('input')); t.mock.timers.tick(150); await settle();
+  const mainButton = document.querySelector('.corpus-record [data-action="open-main-record"]');
+  assert.ok(mainButton);
+  mainButton.click();
+  assert.equal(opened[0].record.id, 'record-56');
+  assert.deepEqual(opened[0].filters, { q: '제공 제목', collection: 'b', fromYear: 1450, toYear: 1456, sort: 'desc' });
+  assert.deepEqual(order, ['focus restored', 'main']);
+  explorer.open('records'); await settle();
+  const nextSearch = document.querySelector('.explorer-search'); nextSearch.value = '제공 제목'; nextSearch.dispatchEvent(new window.Event('input')); t.mock.timers.tick(150); await settle();
+  document.querySelector('.corpus-record-title button').click(); await settle();
+  document.querySelector('.corpus-detail [data-action="open-main-record"]').click();
+  assert.equal(opened[1].record.id, 'record-56');
+  assert.deepEqual(opened[1].filters, { q: '제공 제목', collection: 'b', fromYear: 1450, toYear: 1456, sort: 'desc' });
+});
+
+test('opening a record from the main view preserves its full archive context in details, controls, list, and return action', async () => {
+  const corpus = fixtureCorpus(); const returned = [];
+  const { explorer, document } = setup({ corpus: corpus.api, onOpenRecord: (record, filters) => returned.push({ record, filters }) });
+  assert.equal(typeof explorer.openRecord, 'function');
+  const context = { q: '제공 제목', collection: 'b', fromYear: 1450, toYear: 1456, sort: 'desc' };
+  explorer.openRecord('record-54', context); await settle();
+  assert.match(document.querySelector('.detail-heading').textContent, /제공 제목 54$/);
+  assert.equal(document.querySelector('.explorer-search').value, '제공 제목');
+  assert.equal(document.querySelector('[data-corpus-filter="collection"]').value, 'b');
+  assert.equal(document.querySelector('[data-corpus-filter="fromYear"]').value, '1450');
+  assert.equal(document.querySelector('[data-corpus-filter="toYear"]').value, '1456');
+  assert.equal(document.querySelector('[data-corpus-filter="sort"]').value, 'desc');
+  findButton(document, '목록으로').click(); await settle();
+  assert.deepEqual([...document.querySelectorAll('.corpus-record-title')].map(node => node.textContent), ['제공 제목 56', '제공 제목 54', '제공 제목 52', '제공 제목 50']);
+  const selected = [...document.querySelectorAll('.corpus-record')].find(row => row.dataset.recordId === 'record-54');
+  selected.querySelector('[data-action="open-main-record"]').click();
+  assert.equal(returned[0].record.id, 'record-54');
+  assert.deepEqual(returned[0].filters, context);
+  assert.notEqual(returned[0].filters, context);
+  explorer.openRecord('record-1'); await settle();
+  findButton(document, '목록으로').click(); await settle();
+  assert.equal(document.querySelector('.explorer-search').value, '');
+  assert.equal(document.querySelector('[data-corpus-filter="collection"]').value, 'all');
+  assert.equal(document.querySelectorAll('.corpus-record').length, 50);
+  assert.match(document.querySelector('.corpus-record-title').textContent, /제공 제목 0$/);
 });

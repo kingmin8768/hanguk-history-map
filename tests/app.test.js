@@ -9,7 +9,7 @@ import { project } from '../dist/model.js';
 const app = await import('../dist/app.js').catch(() => ({}));
 const html = await readFile(new URL('../dist/index.html', import.meta.url), 'utf8');
 
-async function setup({ hash = '' } = {}) {
+async function setup({ hash = '#balhae-698' } = {}) {
   const { document, window } = parseHTML(html);
   // LinkeDOM does not reflect the checked HTML attribute into the checked property.
   document.querySelectorAll('input[type="checkbox"]').forEach(input => { input.checked = input.hasAttribute('checked'); });
@@ -69,7 +69,7 @@ test('year input rejects year zero and explains between-snapshot selection', asy
 test('a failed basemap request leaves the chronology usable and exposes a status', async () => {
   assert.equal(typeof app.initAtlas, 'function');
   const { document, window } = parseHTML(html);
-  window.location = { hash: '', href: 'https://example.org/' };
+  window.location = { hash: '#balhae-698', href: 'https://example.org/#balhae-698' };
   window.history = { replaceState() {} };
   const atlas = await app.initAtlas({ document, window, fetch: async () => { throw new Error('offline'); } });
   assert.match(document.querySelector('#map-load-status').textContent, /불러오지 못/);

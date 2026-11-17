@@ -44,6 +44,7 @@ scope.addEventListener('message', async event => {
       if (loadPromise) await loadPromise;
       if (!corpus) throw failure('자료를 먼저 불러온 뒤 다시 시도하세요.', 'CORPUS_NOT_READY');
       if (type === 'query') result = corpus.query(payload);
+      else if (type === 'locate') result = corpus.locate(payload);
       else if (type === 'get') result = corpus.getRecord(payload?.id);
       else throw failure('지원하지 않는 자료 검색 요청입니다.', 'CORPUS_REQUEST_INVALID');
     }
