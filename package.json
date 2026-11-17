@@ -1,6 +1,6 @@
 {
   "name": "hanguk-history-map",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "출처와 함께 탐색하는 한국사 시공간 지도",

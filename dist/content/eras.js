@@ -1,0 +1,15 @@
+export const ERAS = [
+  { id: 'early', label: '고조선·여러 나라', range: '기원전~313', color: '#8d7764' },
+  { id: 'three', label: '삼국·통일기', range: '314~697', color: '#b1843d' },
+  { id: 'northsouth', label: '남북국', range: '698~899', color: '#477e87' },
+  { id: 'later', label: '후삼국', range: '900~935', color: '#93734e' },
+  { id: 'goryeo', label: '고려', range: '936~1391', color: '#54785d' },
+  { id: 'joseon', label: '조선 전기', range: '1392~1591', color: '#537c86' },
+  { id: 'joseon-war', label: '조선의 전쟁', range: '1592~1637', color: '#a26953' },
+  { id: 'joseon-late', label: '조선 후기', range: '1638~1875', color: '#7b7861' },
+  { id: 'opening', label: '개항과 개혁', range: '1876~1896', color: '#9b794d' },
+  { id: 'empire', label: '대한제국', range: '1897~1909', color: '#946b43' },
+  { id: 'colonial', label: '일제강점기', range: '1910~1944', color: '#8b7372' },
+  { id: 'contemporary', label: '해방·전쟁·민주화', range: '1945~1987', color: '#567a9a' },
+  { id: 'recent', label: '오늘로 이어진 역사', range: '1988 이후', color: '#548c80' },
+];

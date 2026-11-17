@@ -16,6 +16,7 @@
     <a class="brand" href="#balhae-698" aria-label="산하 처음으로"><span class="brand-seal" aria-hidden="true">山河</span><span class="brand-word">산하<small>한국사 시공간 지도</small></span></a>
     <div class="header-caption">시간을 따라, 땅 위의 역사를 읽다<span>AN ATLAS OF KOREAN HISTORY</span></div>
     <nav class="header-actions" aria-label="도구">
+      <button class="header-button" id="explore-open"><span aria-hidden="true">▦</span><span>역사 둘러보기</span></button>
       <button class="header-button" id="search-open"><span aria-hidden="true">⌕</span><span>역사 검색</span><kbd>/</kbd></button>
       <button class="header-button" id="sources-open"><span aria-hidden="true">▤</span><span>자료와 출처</span></button>
       <button class="icon-button" id="theme-toggle" aria-label="어두운 화면으로 전환" title="화면 테마 전환">◐</button>
@@ -26,13 +27,13 @@
     <section class="map-panel" aria-label="한국사 지도">
       <div class="map-heading"><span class="eyebrow">역사의 한 장면</span><h1 id="map-title">신라와 발해</h1><p id="map-subtitle">남북국의 시대</p></div>
       <div class="map-year" aria-hidden="true"><span id="map-year-value">698</span><small id="map-year-era">CE</small></div>
-      <svg id="map" viewBox="0 0 1000 900" role="img" aria-label="역사적 수도와 사건 위치 지도" tabindex="0">
+      <svg id="map" viewBox="0 0 1000 900" role="group" aria-label="역사적 수도와 사건 위치 지도" tabindex="0">
         <defs>
           <pattern id="water-grid" width="70" height="70" patternUnits="userSpaceOnUse"><path d="M70 0H0V70" fill="none" stroke="currentColor" stroke-width="0.55" opacity="0.1"/></pattern>
           <filter id="land-shadow"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#3e564e" flood-opacity="0.1"/></filter>
         </defs>
         <rect width="1000" height="900" fill="url(#water-grid)"/>
-        <g id="map-camera"><g id="land-layer" aria-hidden="true"></g><g id="geo-labels" aria-hidden="true"></g><g id="route-layer" aria-hidden="true"></g><g id="marker-layer"></g></g>
+        <g id="map-camera"><g id="land-layer" aria-hidden="true"></g><g id="geo-labels" aria-hidden="true"></g><g id="route-layer" aria-hidden="true"></g><g id="marker-layer"></g><g id="figure-route-layer"></g></g>
       </svg>
       <p class="map-load-status" id="map-load-status" role="status">해안선 지도를 불러오는 중입니다…</p>
       <div class="map-layers"><label><input type="checkbox" id="capitals-toggle" checked><span class="legend-diamond">◆</span> 수도·거점</label><label><input type="checkbox" id="events-toggle" checked><span class="legend-dot">●</span> 사건</label><label><input type="checkbox" id="routes-toggle">천도 연결선</label></div>
@@ -41,6 +42,7 @@
       <div class="compass" aria-hidden="true"><span>N</span><svg width="22" height="42" viewBox="0 0 22 42"><path d="M11 2L20 36L11 29Z" fill="currentColor"/><path d="M11 2L2 36L11 29Z" fill="none" stroke="currentColor"/></svg></div>
       <div class="map-footnote"><span>현대 해안선 위의 역사적 장소 · 가까운 표식은 연결선으로 분리</span><span>국경 복원도 아님 · Natural Earth</span></div>
       <div class="place-popup" id="place-popup" hidden></div>
+      <div class="route-banner" id="active-route" hidden><div><strong id="active-route-name"></strong><span id="active-route-description"></span></div><button id="route-details" class="text-button">인물 해설</button><button id="route-clear" class="icon-button" aria-label="인물 활동 지점 닫기">×</button></div>
     </section>
 
     <aside class="chronicle" id="chronicle" tabindex="-1" aria-label="선택한 시대의 역사">
@@ -51,9 +53,14 @@
       <div class="section-rule"><span></span><i>◆</i><span></span></div>
       <p class="chronicle-summary" id="chronicle-summary"></p>
       <div class="historical-note" id="historical-note"></div>
-      <div class="sidebar-tabs" role="tablist" aria-label="기록 종류"><button id="events-tab" role="tab" aria-selected="true" aria-controls="events-content">주요 사건</button><button id="places-tab" role="tab" aria-selected="false" aria-controls="places-content" tabindex="-1">지명과 장소</button></div>
+      <div id="scene-tags" class="scene-tags" aria-label="이 장면의 주제"></div>
+      <div class="scene-statistics" id="atlas-statistics"></div>
+      <div class="sidebar-tabs" role="tablist" aria-label="기록 종류"><button id="events-tab" role="tab" aria-selected="true" aria-controls="events-content">주요 사건</button><button id="details-tab" role="tab" aria-selected="false" aria-controls="details-content" tabindex="-1">시대 해설</button><button id="places-tab" role="tab" aria-selected="false" aria-controls="places-content" tabindex="-1">지명</button><button id="people-tab" role="tab" aria-selected="false" aria-controls="people-content" tabindex="-1">인물</button></div>
       <div id="events-content" role="tabpanel" aria-labelledby="events-tab"></div>
+      <div id="details-content" role="tabpanel" aria-labelledby="details-tab" hidden></div>
       <div id="places-content" role="tabpanel" aria-labelledby="places-tab" hidden></div>
+      <div id="people-content" role="tabpanel" aria-labelledby="people-tab" hidden></div>
+      <div class="scene-guide-links"><button class="text-button" id="scene-timeline-open">전체 연표에서 살펴보기 ↗</button><button class="text-button" id="scene-polities-open">정치체별 개관 ↗</button></div>
       <div class="snapshot-sources"><span class="eyebrow">이 장면의 근거</span><div id="snapshot-sources"></div></div>
       <div class="chronicle-footer">사료를 바탕으로 읽고,<br>불확실한 것은 함께 남깁니다.</div>
     </aside>
@@ -72,7 +79,7 @@
   </footer>
 
   <dialog id="search-dialog" class="search-dialog"><div class="dialog-top"><span class="eyebrow">역사를 찾아서</span><button class="icon-button" data-close aria-label="검색 닫기">×</button></div><label for="search-input" class="sr-only">시대, 사건, 지명 검색</label><input type="search" id="search-input" placeholder="시대, 사건, 옛 지명과 오늘의 지명" autocomplete="off"><p class="search-hint" id="search-hint">‘발해’, ‘한양’, ‘독립’을 찾아보세요.</p><div id="search-results" aria-live="polite"></div></dialog>
-  <dialog id="sources-dialog" class="sources-dialog"><div class="dialog-top"><span class="eyebrow">기록을 읽는 방법</span><button class="icon-button" data-close aria-label="자료와 출처 닫기">×</button></div><h2>출처가 있는 역사,<br>여지를 남기는 지도.</h2><p>산하는 한국사의 대표 장면을 공식 역사 자료와 함께 살펴보는 지도입니다. 각 사건의 출처를 열어 원문을 확인할 수 있습니다.</p><div class="method-grid"><div><h3>시간</h3><p>연속된 매년의 상태를 복원한 자료가 아닙니다. 입력한 연도에 앞서는 가장 가까운 대표 시점을 보여주며, 실제 표시 연도를 명시합니다. 기원전은 음수로 입력합니다.</p></div><div><h3>공간</h3><p>현대 해안선에 수도·유적·사건의 개략 위치를 표시합니다. 점과 천도 연결선은 영토·국경·당시의 도로를 뜻하지 않습니다. 가까운 표식은 원래 위치에서 가는 선을 이어 분리합니다. 위치가 불확실한 장소는 설명에 남깁니다.</p></div><div><h3>서술</h3><p>건국 전승과 역사적 확인을 구분하고, 같은 시기에 존재한 정치체를 함께 다룹니다. 주권·영향권을 임의의 면으로 그리지 않습니다.</p></div></div><h3>역사 자료</h3><div id="all-sources" class="all-sources"></div><h3>프로젝트와 지리 자료</h3><p>직접 작성한 코드와 한국사 요약으로 구성했습니다.</p><p>해안선: <a href="https://www.naturalearthdata.com/about/terms-of-use/" target="_blank" rel="noopener noreferrer">Natural Earth · Public Domain</a>. 세부 출처와 검증 기준은 저장소 문서를 참조하세요.</p></dialog>
+  <dialog id="sources-dialog" class="sources-dialog"><div class="dialog-top"><span class="eyebrow">기록을 읽는 방법</span><button class="icon-button" data-close aria-label="자료와 출처 닫기">×</button></div><h2>출처가 있는 역사,<br>여지를 남기는 지도.</h2><p>산하는 한국사의 대표 장면을 공식 역사 자료와 함께 살펴보는 지도입니다. 각 사건의 출처를 열어 원문을 확인할 수 있습니다.</p><div class="method-grid"><div><h3>시간</h3><p>연속된 매년의 상태를 복원한 자료가 아닙니다. 입력한 연도에 앞서는 가장 가까운 대표 시점을 보여주며, 실제 표시 연도를 명시합니다. 기원전은 음수로 입력합니다.</p></div><div><h3>공간</h3><p>현대 해안선에 수도·유적·사건의 개략 위치를 표시합니다. 점과 천도 연결선은 영토·국경·당시의 도로를 뜻하지 않습니다. 인물 경로도 확인된 활동 지점의 연대순 연결입니다. 가까운 표식은 원래 위치에서 가는 선을 이어 분리합니다. 위치가 불확실한 장소는 설명에 남깁니다.</p></div><div><h3>서술</h3><p>건국 전승과 역사적 확인을 구분하고, 같은 시기에 존재한 정치체를 함께 다룹니다. 정치·전쟁뿐 아니라 문화·사회·외교의 변화를 함께 읽습니다.</p></div></div><h3>역사 자료</h3><label class="source-filter-label" for="source-filter">원문 제목·기관으로 찾기</label><input type="search" id="source-filter" class="explorer-search" placeholder="예: 훈민정음, 국가기록원"><p id="source-count" class="catalogue-meta" role="status"></p><div id="all-sources" class="all-sources"></div><h3>프로젝트와 지리 자료</h3><p>직접 작성한 코드와 한국사 요약으로 구성했습니다.</p><p>해안선: <a href="https://www.naturalearthdata.com/about/terms-of-use/" target="_blank" rel="noopener noreferrer">Natural Earth · Public Domain</a>. 세부 출처와 검증 기준은 저장소 문서를 참조하세요.</p></dialog>
   <div id="toast" class="toast" role="status" hidden></div>
   <noscript><div class="noscript">지도의 시대 선택과 검색을 사용하려면 JavaScript를 켜주세요.</div></noscript>
 </body>
