@@ -15,7 +15,14 @@ async function setup({ hash = '' } = {}) {
   document.querySelectorAll('input[type="checkbox"]').forEach(input => { input.checked = input.hasAttribute('checked'); });
   window.location = { hash, href: `https://example.org/${hash}` };
   window.history = { replaceState(_state, _title, hash) { window.location.hash = hash; } };
-  const atlas = await app.initAtlas({ document, window, fetch: async () => ({ ok: true, json: async () => ({ type: 'FeatureCollection', features: [] }) }) });
+  const corpusRecords = [{ id: 'test-1945', year: 1945, originalDate: '1945-08-15', title: '광복 관련 기록', body: '공식 연표에서 날짜와 원문을 살펴보는 테스트 기록입니다.', collectionId: 'test-collection', sourceUrl: 'https://db.history.go.kr/id/tcct_1945_08_15_0010', originalMetadataUrl: 'https://example.org/metadata/test-1945', calendar: 'unspecified', precision: 'day' }];
+  const corpusStore = {
+    getManifest: async () => ({ schemaVersion: 1, recordCount: 1, collections: [{ id: 'test-collection', label: '테스트 공식 자료', count: 1 }], coverage: { fromYear: 1945, toYear: 1945 }, dataset: { id: '15051036', title: '연표 메타데이터', provider: '국사편찬위원회', landingUrl: 'https://www.data.go.kr/data/15051036/fileData.do', license: { name: '공공누리 제1유형', url: 'https://www.kogl.or.kr/info/license.do', attribution: '국사편찬위원회' } } }),
+    query: async ({ offset = 0, limit = 50 } = {}) => ({ items: corpusRecords, total: 1, offset, limit }),
+    getRecord: async id => corpusRecords.find(record => record.id === id) || null,
+    dispose() {},
+  };
+  const atlas = await app.initAtlas({ document, window, corpusStore, fetch: async () => ({ ok: true, json: async () => ({ type: 'FeatureCollection', features: [] }) }) });
   return { document, window, atlas };
 }
 
@@ -216,5 +223,17 @@ test('the source library can filter official documents and explain a zero-match 
   input.value = '';
   input.dispatchEvent(new window.Event('input'));
   assert.equal([...document.querySelectorAll('#all-sources .source-item')].filter(item => !item.hidden).length, atlasData.SOURCES.length);
+  atlas.destroy();
+});
+
+test('official chronology is a prominent separately counted collection and opens its records', async () => {
+  const { document, atlas } = await setup();
+  assert.match(document.querySelector('#corpus-count').textContent, /1/);
+  document.querySelector('#corpus-open').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(document.querySelector('#explorer-dialog[open]'));
+  assert.equal(document.querySelector('[data-section="records"]').getAttribute('aria-selected'), 'true');
+  assert.match(document.querySelector('#explorer-dialog').textContent, /광복 관련 기록/);
+  assert.match(document.querySelector('#corpus-summary').textContent, /공식/);
   atlas.destroy();
 });

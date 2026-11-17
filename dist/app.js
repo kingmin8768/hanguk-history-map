@@ -3,10 +3,11 @@ import * as atlasData from './data.js';
 import { formatYear, getSnapshotForYear, project } from './model.js';
 import { createExplorer } from './explorer.js';
 import { buildCityHistories, searchCatalogue } from './catalogue.js';
+import { createCorpusStore } from './corpus-client.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-export async function initAtlas({ document: doc, window: win, fetch: fetchResource }) {
+export async function initAtlas({ document: doc, window: win, fetch: fetchResource, corpusStore }) {
   const $ = selector => doc.querySelector(selector);
   const sources = new Map(SOURCES.map(source => [source.id, source]));
   const figures = atlasData.FIGURES || [];
@@ -17,6 +18,8 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
   for (const city of buildCityHistories(SNAPSHOTS)) for (const record of city.records) cityByPlace.set(record.place, city);
   const state = { index: Math.max(0, SNAPSHOTS.findIndex(snapshot => snapshot.year === 698)), playing: false, zoom: 1, x: 0, y: 0, selectedPlace: null, selectedFigure: null };
   let explorer;
+  const corpus = corpusStore || createCorpusStore({ fetchResource });
+  let destroyed = false;
   let playbackTimer;
   let toastTimer;
   let lastFocused;
@@ -417,13 +420,28 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
   }
   switchTab('details');
   explorer = createExplorer({
-    document: doc, snapshots: SNAPSHOTS, eras: ERAS, sources: SOURCES, figures, polities,
+    document: doc, snapshots: SNAPSHOTS, eras: ERAS, sources: SOURCES, figures, polities, corpus,
     onSelectSnapshot: id => { const index = SNAPSHOTS.findIndex(snapshot => snapshot.id === id); if (index >= 0) selectSnapshot(index); },
     onRoute: showFigureRoute,
     onClearRoute: clearFigureRoute,
     onOpenPlace: showPlace,
   });
-  $('#atlas-statistics').textContent = `${SNAPSHOTS.length}개 장면 · ${SNAPSHOTS.reduce((total, snapshot) => total + snapshot.events.length, 0)}개 사건 항목 · ${figures.length}명 인물`;
+  $('#atlas-statistics').textContent = `지도 해설 ${SNAPSHOTS.length}개 · 사건 항목 ${SNAPSHOTS.reduce((total, snapshot) => total + snapshot.events.length, 0)}개 · 인물 ${figures.length}명`;
+  corpus.getManifest().then(manifest => {
+    if (destroyed) return;
+    const count = manifest.recordCount.toLocaleString('ko-KR');
+    $('#corpus-count').textContent = `${count}건`;
+    $('#scene-corpus-open').textContent = `공식 자료 연표 ${count}건 살펴보기 ↗`;
+    $('#corpus-open').setAttribute('aria-label', `공식 자료 연표 ${count}건 열기`);
+  }).catch(() => { /* The corpus tab supplies retry and error feedback; map scenes remain available. */ });
+  on($('#corpus-open'), 'click', () => openExplorer('records'));
+  on($('#scene-corpus-open'), 'click', () => openExplorer('records'));
+  on($('#search-corpus-open'), 'click', () => {
+    const query = $('#search-input').value;
+    closeDialog($('#search-dialog'));
+    stop();
+    explorer.searchRecords(query);
+  });
   on($('#explore-open'), 'click', () => openExplorer());
   on($('#scene-timeline-open'), 'click', () => openExplorer('timeline'));
   on($('#scene-polities-open'), 'click', () => openExplorer('polities'));
@@ -554,7 +572,7 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
     $('#map-load-status').hidden = false;
     $('#map-load-status').textContent = '해안선 지도를 불러오지 못했습니다. 시대 선택·사건·출처는 계속 이용할 수 있습니다.';
   }
-  return { selectSnapshot, stop, explorer, get state() { return { ...state }; }, destroy() { stop(); explorer.destroy(); clearTimeout(toastTimer); listeners.forEach(remove => remove()); } };
+  return { selectSnapshot, stop, explorer, get state() { return { ...state }; }, destroy() { destroyed = true; stop(); explorer.destroy(); if (!corpusStore) corpus.dispose(); clearTimeout(toastTimer); listeners.forEach(remove => remove()); } };
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {

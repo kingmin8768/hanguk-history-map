@@ -642,3 +642,112 @@ button.chronology-row:hover .catalogue-card-title { color: var(--accent); }
   .atlas { display: flex; }
   .route-banner, .explorer-dialog { display: none !important; }
 }
+
+/* Official records remain a distinct, source-labelled reading collection. */
+#corpus-open { min-height: 36px; color: var(--accent); }
+#corpus-count { font-variant-numeric: tabular-nums; }
+#corpus-open #corpus-count { margin-left: 4px; color: var(--muted); font-family: Georgia, var(--serif); font-size: 10px; }
+#search-corpus-open { min-height: 40px; padding: 8px 0; margin-bottom: 8px; color: var(--accent); font-size: 12px; }
+#corpus-summary { margin: 17px 0 24px; padding-top: 15px; border-top: 1px solid var(--rule); }
+#corpus-summary > span { display: block; margin-bottom: 10px; color: var(--muted); font-size: 11px; line-height: 1.8; }
+#corpus-summary > button, #corpus-summary button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 48px; padding: 11px 13px; border: 1px solid var(--rule); border-left: 2px solid var(--accent); background: var(--paper-raised); color: var(--ink); font-size: 13px; line-height: 1.8; text-align: left; }
+#corpus-summary button:hover { border-color: var(--accent); color: var(--accent); }
+#corpus-summary p, #corpus-summary small { display: block; margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.8; }
+#corpus-summary #corpus-count { color: var(--accent); font-family: Georgia, var(--serif); font-size: 19px; }
+.explorer-tabs { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; scrollbar-color: var(--rule) transparent; scroll-padding-inline: 20px; }
+.explorer-tabs button { flex: 0 0 auto; }
+.explorer-tabs button:focus-visible { outline-offset: -4px; }
+.explorer-toolbar:has(.corpus-filters:not([hidden])) .explorer-search { flex-basis: 100%; }
+.corpus-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 21px 32px 17px; }
+.corpus-filters { display: grid; grid-template-columns: minmax(160px, 1.5fr) repeat(2, minmax(110px, 1fr)) minmax(150px, 1.25fr) auto auto; align-items: end; gap: 12px; width: 100%; margin: 0; }
+.corpus-filters label { display: flex; flex-direction: column; gap: 7px; min-width: 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.corpus-filters select, .corpus-filters input { width: 100%; min-width: 0; height: 44px; padding: 9px 11px; border: 1px solid var(--rule); border-radius: 2px; background: var(--paper); color: var(--ink); font-size: 13px; line-height: 1.6; }
+.corpus-filters select { padding-right: 26px; }
+.corpus-filters input[data-corpus-filter="fromYear"], .corpus-filters input[data-corpus-filter="toYear"] { font-family: Georgia, var(--serif); font-size: 18px; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.corpus-filters input::placeholder { color: var(--muted); opacity: 1; font-family: var(--sans); font-size: 12px; letter-spacing: normal; }
+.corpus-filters > button { min-width: 88px; min-height: 44px; padding: 9px 12px; border: 1px solid var(--rule); border-radius: 2px; background: var(--paper-raised); color: var(--accent); font-size: 12px; line-height: 1.7; }
+.corpus-filters > button:hover { border-color: var(--accent); background: var(--accent-soft); }
+.corpus-provenance { margin: 0 32px 12px; padding: 15px 17px; border: 1px solid var(--rule-soft); background: var(--paper); color: var(--muted); font-size: 12px; line-height: 1.9; word-break: keep-all; overflow-wrap: anywhere; }
+.corpus-provenance p { margin: 5px 0; }
+.corpus-provenance strong { color: var(--ink); font-weight: 500; }
+.corpus-provenance a { display: inline-block; padding: 2px 0; color: var(--accent); font-size: 12px; line-height: 1.9; text-decoration: underline; text-underline-offset: 3px; }
+.corpus-provenance a + a { margin-left: 12px; }
+.explorer-list.corpus-list { display: block; margin: 0; padding-bottom: 25px; list-style: none; }
+.corpus-record { display: grid; grid-template-columns: 145px minmax(0, 1fr); gap: 22px; padding: 22px 0 25px; border-bottom: 1px solid var(--rule); }
+.corpus-date { margin: 5px 0 0; color: var(--accent); font-family: Georgia, var(--serif); font-size: 17px; font-variant-numeric: tabular-nums; line-height: 1.85; word-break: keep-all; overflow-wrap: anywhere; }
+.corpus-record-content { min-width: 0; }
+.corpus-record-title { margin: 0 0 8px; color: var(--ink); font-family: var(--serif); font-size: 21px; font-weight: 500; line-height: 1.6; letter-spacing: -.02em; word-break: keep-all; overflow-wrap: anywhere; }
+.corpus-record-title button { min-height: 44px; padding: 0; color: inherit; font: inherit; line-height: inherit; text-align: left; }
+.corpus-record-title button:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 5px; }
+.corpus-snippet { display: -webkit-box; margin: 7px 0 12px; overflow: hidden; color: var(--muted); font-size: 14px; line-height: 1.95; word-break: keep-all; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; }
+.corpus-date-note { display: block; margin: 12px 0; padding-left: 10px; border-left: 2px solid var(--rule); color: var(--muted); font-size: 12px; line-height: 1.85; word-break: keep-all; overflow-wrap: anywhere; }
+.corpus-record .source-link { display: inline-block; min-height: 29px; margin: 4px 12px 0 0; padding: 4px 0; color: var(--accent); font-size: 12px; line-height: 1.8; text-decoration: underline; text-underline-offset: 3px; }
+.corpus-record .catalogue-meta { margin: 5px 0 10px; }
+.corpus-pagination { position: sticky; z-index: 2; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; margin: 0 32px; padding: 15px 0 20px; border-top: 1px solid var(--rule); background: var(--paper-raised); box-shadow: 0 -8px 12px var(--paper-raised); color: var(--muted); font-size: 12px; line-height: 1.8; }
+.corpus-pagination > p { flex-basis: 100%; margin: 0 0 4px; font-variant-numeric: tabular-nums; }
+.corpus-pagination button { min-width: 44px; min-height: 44px; padding: 9px 12px; border: 1px solid var(--rule); border-radius: 2px; color: var(--ink); background: var(--paper); font-size: 12px; line-height: 1.7; }
+.corpus-pagination button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.corpus-pagination button:disabled { opacity: .5; }
+.corpus-pagination form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
+.corpus-pagination label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.corpus-pagination input { width: 75px; height: 44px; padding: 8px; border: 1px solid var(--rule); border-radius: 2px; background: var(--paper); color: var(--ink); font-family: Georgia, var(--serif); font-size: 17px; font-variant-numeric: tabular-nums; text-align: center; }
+.corpus-page-error { flex-basis: 100%; margin: 5px 0 0; color: var(--accent); font-size: 12px; line-height: 1.8; }
+.corpus-page-error:empty { display: none; }
+.corpus-loading { margin: 0; padding: 45px 25px; color: var(--muted); font-size: 14px; line-height: 1.9; text-align: center; }
+.corpus-error { margin: 20px 32px 30px; padding: 20px; border: 1px solid var(--rule); border-left: 2px solid var(--accent); color: var(--ink); background: var(--paper); font-size: 14px; line-height: 1.9; word-break: keep-all; }
+.corpus-error p { margin: 0 0 14px; }
+.corpus-error button { min-height: 44px; padding: 8px 14px; border: 1px solid var(--accent); background: var(--paper-raised); color: var(--accent); font-size: 13px; line-height: 1.8; }
+.corpus-error button:hover { background: var(--accent-soft); }
+.corpus-detail .corpus-body { margin: 16px 0; color: var(--ink); font-size: 15px; line-height: 2.05; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; }
+.corpus-detail .corpus-date-note { max-width: 800px; margin: 20px auto; }
+.corpus-detail .detail-sources a { padding: 4px 0; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
+.corpus-detail .corpus-original-date { color: var(--ink); font-size: 16px; font-variant-numeric: tabular-nums; line-height: 1.9; }
+.detail-sources > h4 { flex-basis: 100%; margin-bottom: 5px; }
+.corpus-metadata { flex-basis: 100%; width: 100%; margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--rule); }
+.corpus-metadata summary { min-height: 44px; padding: 9px 0; color: var(--accent); font-size: 13px; line-height: 1.8; cursor: pointer; }
+.corpus-metadata p, .corpus-metadata .corpus-metadata-path { margin: 9px 0; color: var(--muted); font-size: 12px; line-height: 1.85; word-break: break-word; overflow-wrap: anywhere; }
+
+@media (max-width: 1340px) {
+  .header-caption { display: none; }
+}
+@media (max-width: 900px) {
+  .corpus-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .corpus-filters > button { grid-column: auto; justify-self: stretch; min-width: 0; }
+  .corpus-record { grid-template-columns: 125px minmax(0, 1fr); gap: 18px; }
+  .corpus-pagination form { flex-basis: 100%; justify-content: flex-end; margin-left: 0; }
+}
+@media (max-width: 700px) {
+  .header-actions { gap: 9px; }
+  #corpus-open { min-height: 40px; padding: 7px 0; font-size: 11px; }
+  #corpus-open > span:first-child { display: none; }
+  #corpus-open > span:nth-child(2) { position: static; width: auto; height: auto; margin: 0; clip: auto; overflow: visible; white-space: nowrap; }
+  #corpus-open #corpus-count { display: block; margin: 2px 0 0; font-size: 10px; line-height: 1; }
+  .explorer-tabs { justify-content: flex-start; gap: 17px; padding-right: 20px; padding-left: 20px; scroll-padding-inline: 20px; }
+  .explorer-tabs button { min-height: 48px; padding-right: 3px; padding-left: 3px; }
+  .corpus-toolbar { padding: 18px 20px 15px; }
+  .explorer-toolbar:has(.corpus-filters:not([hidden])) input.explorer-search { font-size: 16px; }
+  .corpus-filters { gap: 11px; }
+  .corpus-filters label { gap: 6px; font-size: 12px; }
+  .corpus-filters select { padding-right: 22px; padding-left: 9px; font-size: 13px; }
+  .corpus-filters > button { width: 100%; }
+  .corpus-provenance { margin: 0 20px 12px; padding: 13px; font-size: 12px; }
+  .corpus-provenance a { min-height: 32px; padding-top: 5px; padding-bottom: 5px; }
+  .corpus-record { grid-template-columns: 1fr; gap: 8px; padding: 21px 0 24px; }
+  .corpus-date { margin: 0; font-size: 17px; line-height: 1.7; }
+  .corpus-record-title { font-size: 21px; }
+  .corpus-snippet { font-size: 14px; -webkit-line-clamp: 5; line-clamp: 5; }
+  .corpus-record .source-link { min-height: 36px; padding-top: 7px; padding-bottom: 7px; }
+  .corpus-pagination { gap: 7px; margin-right: 20px; margin-left: 20px; padding-top: 12px; padding-bottom: 15px; }
+  .corpus-pagination > button { flex: 1; padding-right: 7px; padding-left: 7px; }
+  .corpus-pagination form { justify-content: center; margin-top: 3px; }
+  .corpus-pagination form label { flex: 1; min-width: 0; font-size: 11px; white-space: normal; }
+  .corpus-pagination form input { flex-shrink: 0; width: 68px; }
+  .corpus-pagination input { font-size: 17px; }
+  .corpus-error { margin: 15px 20px 25px; padding: 17px; }
+  .corpus-detail .corpus-body { font-size: 15px; line-height: 2; }
+}
+@media (max-width: 340px) {
+  #explore-open > span:first-child { display: block; }
+  #explore-open > span:nth-child(2) { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+  .header-actions { gap: 8px; }
+}

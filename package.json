@@ -1,11 +1,11 @@
 {
   "name": "hanguk-history-map",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "description": "출처와 함께 탐색하는 한국사 시공간 지도",
   "scripts": {
-    "test": "node --test",
+    "test": "node --test && python3 -m unittest discover -s tests -p test_official_import.py",
     "check": "node --check dist/app.js && node --check dist/model.js && node --check dist/data.js",
     "serve": "python3 -m http.server 3000 --directory dist",
     "build": "node scripts/check-build.js"

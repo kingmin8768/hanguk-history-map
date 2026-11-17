@@ -13,6 +13,11 @@ if (geography.type !== 'FeatureCollection' || !geography.features.length) throw 
 const html = await readFile(resolve(root, 'index.html'), 'utf8');
 for (const match of html.matchAll(/(?:src|href)="(\.\/[^"]+)"/g)) await access(resolve(root, match[1]));
 for (const source of SOURCES) if (new URL(source.url).protocol !== 'https:') throw new Error(`Non-HTTPS source: ${source.id}`);
+const corpus = JSON.parse(await readFile(resolve(root, 'corpus/manifest.json'), 'utf8'));
+if (corpus.schemaVersion !== 1 || corpus.recordCount < 200_000 || corpus.dataset.id !== '15051036') throw new Error('Missing official chronology corpus');
+const corpusData = resolve(root, 'corpus', corpus.data.path);
+await access(corpusData);
+if ((await stat(corpusData)).size !== corpus.data.byteLength) throw new Error('Corpus archive size does not match its manifest');
 async function inspectModules(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = resolve(directory, entry.name);
@@ -28,4 +33,4 @@ async function inspectModules(directory) {
   }
 }
 await inspectModules(root);
-console.log(`Static build ready: ${SNAPSHOTS.length} scenes, ${FIGURES.length} people, ${POLITIES.length} profiles, ${SOURCES.length} sources, ${geography.features.length} geographic features.`);
+console.log(`Static build ready: ${corpus.recordCount.toLocaleString('en')} official records, ${SNAPSHOTS.length} map scenes, ${FIGURES.length} people, ${POLITIES.length} profiles, ${SOURCES.length} curated sources.`);
