@@ -89,6 +89,46 @@ test('first visit opens the Korean history map and keeps the record catalogue av
   atlas.destroy();
 });
 
+test('place exploration opens from the map and restores a shared city profile', async () => {
+  const { document, atlas } = await setup({ hash: '#hanyang-1394' });
+  document.querySelector('#places-map-open').click();
+  assert.ok(document.querySelector('#places-map-dialog[open]'));
+  assert.ok(document.querySelector('#places-map-dialog svg.place-overview-map'));
+  assert.equal(atlas.state.mode, 'scenes');
+  atlas.destroy();
+
+  const shared = await setup({ hash: '#places?city=gaeseong' });
+  const dialog = shared.document.querySelector('#places-map-dialog[open]');
+  assert.ok(dialog);
+  assert.match(dialog.textContent, /개성/);
+  assert.match(dialog.textContent, /개경/);
+  assert.ok(dialog.querySelector('a[href^="https:"]'));
+  assert.equal(shared.window.location.hash, '#places?city=gaeseong');
+  shared.atlas.destroy();
+});
+
+test('comparison opens for the neighboring scene and restores a different shared pair', async () => {
+  const { document, window, atlas } = await setup({ hash: '#hanyang-1394' });
+  document.querySelector('#compare-open').click();
+  const dialog = document.querySelector('#compare-dialog[open]');
+  assert.ok(dialog);
+  assert.match(dialog.textContent, /1392년/);
+  assert.match(dialog.textContent, /1394년/);
+  assert.deepEqual([...dialog.querySelectorAll('svg.compare-map')].map(map => map.getAttribute('viewBox')), ['0 0 1000 900', '0 0 1000 900']);
+  dialog.querySelector('[data-action="share-compare"]').click();
+  assert.equal(window.location.hash, '#compare?left=joseon-1392&right=hanyang-1394');
+  assert.match(dialog.querySelector('.map-tool-share-status').textContent, /주소창/);
+  atlas.destroy();
+
+  const shared = await setup({ hash: '#compare?left=independence-1919&right=liberation-1945' });
+  const sharedDialog = shared.document.querySelector('#compare-dialog[open]');
+  assert.ok(sharedDialog);
+  assert.match(sharedDialog.textContent, /3·1운동과 대한민국 임시정부/);
+  assert.match(sharedDialog.textContent, /해방, 그리고 군정의 시작/);
+  assert.equal(shared.window.location.hash, '#compare?left=independence-1919&right=liberation-1945');
+  shared.atlas.destroy();
+});
+
 test('the 1919 scene keeps Seoul in view and moves to Shanghai only after an explicit place selection', async () => {
   const { document, atlas } = await setup();
   const index = SNAPSHOTS.findIndex(snapshot => snapshot.year === 1919);

@@ -4,6 +4,9 @@ import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { createCorpusIndex } from '../dist/corpus-query.js';
+import { buildCityHistories } from '../dist/catalogue.js';
+import { SNAPSHOTS } from '../dist/data.js';
+import { PLACE_RECORD_LINKS } from '../dist/place-record-links.js';
 
 const manifest = JSON.parse(await readFile(new URL('../dist/corpus/manifest.json', import.meta.url), 'utf8'));
 const compressed = await readFile(new URL(`../dist/corpus/${manifest.data.path}`, import.meta.url));
@@ -59,6 +62,31 @@ test('same-year records and date uncertainty survive corpus normalization', () =
   assert.ok(records.some(record => record.precision === 'year' && record.originalDate.includes('99')));
   assert.ok(records.some(record => record.precision === 'month' && record.originalDate.includes('99')));
   assert.ok(records.some(record => record.year === 782 && record.originalDate.endsWith('L10')));
+});
+
+test('the city reader links to real official records and preserves the supplied titles and years', () => {
+  const cities = new Set(buildCityHistories(SNAPSHOTS).map(city => city.id));
+  const expected = new Map();
+  for (const [city, links] of Object.entries(PLACE_RECORD_LINKS)) {
+    assert.ok(cities.has(city), city);
+    assert.equal(new Set(links.map(link => link.recordId)).size, links.length);
+    for (const link of links) {
+      assert.ok(link.note.trim(), link.recordId);
+      if (!expected.has(link.recordId)) expected.set(link.recordId, []);
+      expected.get(link.recordId).push(link);
+    }
+  }
+  assert.ok(expected.size > 0);
+  for (const record of records) {
+    const links = expected.get(record.id);
+    if (!links) continue;
+    for (const link of links) {
+      assert.equal(link.year, record.year, record.id);
+      assert.equal(link.title, record.title, record.id);
+    }
+    expected.delete(record.id);
+  }
+  assert.deepEqual([...expected.keys()], []);
 });
 
 test('retired modern-history article IDs point to the official collection without impersonating a current article', () => {

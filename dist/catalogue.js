@@ -25,7 +25,7 @@ const tokensFor = query => normalize(query).split(' ').filter(Boolean);
 const matches = (value, tokens) => tokens.every(token => normalize(value).includes(token));
 
 function cityIdentity(place) {
-  if (place.siteId) return { id: place.siteId, name: CITIES.find(city => city.id === place.siteId)?.name || place.modernName || place.name };
+  if (place.siteId) return CITIES.find(city => city.id === place.siteId) || { id: place.siteId, name: place.modernName || place.name };
   const name = normalize(place.name);
   const id = normalize(place.id);
   const known = CITIES.find(city => city.aliases.some(alias => alias === name || alias === id || (id.startsWith(`${alias}-`) && /^[a-z]/.test(alias))))
@@ -43,7 +43,7 @@ export function buildCityHistories(snapshots = []) {
       if (seen.has(recordId)) continue;
       seen.add(recordId);
       const identity = cityIdentity(place);
-      if (!cities.has(identity.id)) cities.set(identity.id, { id: identity.id, name: identity.name, aliases: [], records: [] });
+      if (!cities.has(identity.id)) cities.set(identity.id, { id: identity.id, name: identity.name, aliases: [...(identity.aliases || [])], records: [] });
       const city = cities.get(identity.id);
       for (const alias of [place.name, place.modernName, place.id]) if (alias && !city.aliases.includes(alias)) city.aliases.push(alias);
       city.records.push({ id: recordId, year: snapshot.year, name: place.name, polity: place.polity, note: place.note, snapshot, place });

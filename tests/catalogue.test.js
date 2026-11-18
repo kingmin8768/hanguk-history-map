@@ -17,6 +17,8 @@ test('city histories join historical city names while keeping unidentified sites
   const histories = catalogue.buildCityHistories(snapshots);
   const seoul = histories.find(city => city.id === 'seoul');
   assert.equal(seoul.name, '서울');
+  assert.ok(seoul.aliases.includes('seoul'));
+  assert.ok(seoul.aliases.includes('한양'));
   assert.deepEqual(seoul.records.map(record => [record.snapshot.id, record.place.name, record.year]), [['ancient', '한성', 475], ['early', '한양', 1394], ['late', '경성', 1919]]);
   assert.equal(new Set(seoul.records.map(record => record.id)).size, 3);
   assert.ok(histories.find(city => city.id === 'mountain'));

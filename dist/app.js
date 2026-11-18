@@ -8,6 +8,9 @@ import { createRecordBrowser } from './record-browser.js';
 import { createMainRecordView } from './main-record-view.js';
 import { createDistributionView } from './distribution-view.js';
 import { READING_PATHS } from './reading-paths-data.js';
+import { createPlaceMapView } from './place-map-view.js';
+import { createCompareView } from './compare-view.js';
+import { PLACE_RECORD_LINKS } from './place-record-links.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const atlasTitle = '한국사 지도';
@@ -24,8 +27,9 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
   const polities = atlasData.POLITIES || [];
   const figureById = new Map(figures.map(figure => [figure.id, figure]));
   const polityById = new Map(polities.map(polity => [polity.id, polity]));
+  const cities = buildCityHistories(SNAPSHOTS);
   const cityByPlace = new Map();
-  for (const city of buildCityHistories(SNAPSHOTS)) for (const record of city.records) cityByPlace.set(record.place, city);
+  for (const city of cities) for (const record of city.records) cityByPlace.set(record.place, city);
   const state = { mode: null, index: Math.max(0, homeSceneIndex), playing: false, zoom: 1, x: 0, y: 0, selectedPlace: null, selectedFigure: null };
   const markerPositions = new WeakMap();
   let explorer, recordBrowser, recordView;
@@ -52,6 +56,21 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
       stop();
       recordBrowser.setFilters({ fromYear, toYear });
     },
+  });
+  const landLayer = $('#land-layer');
+  const placeMapView = createPlaceMapView({
+    document: doc, cities, sources, landLayer, recordLinks: PLACE_RECORD_LINKS,
+    onSelectScene: openMapToolScene,
+    onOpenRecord(recordId) {
+      openRecords(recordId);
+      $('#chronicle').focus();
+    },
+    onShare: cityId => shareMapTool('places', { city: cityId }),
+  });
+  const compareView = createCompareView({
+    document: doc, snapshots: SNAPSHOTS, landLayer,
+    onSelectScene: openMapToolScene,
+    onShare: (left, right) => shareMapTool('compare', { left, right }),
   });
   const listeners = [];
   function on(target, type, callback, options) {
@@ -155,8 +174,8 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
     popup.append(links);
     const city = cityByPlace.get(place);
     if (city) {
-      const history = element('button', 'text-button', `${city.name}의 시대별 기록 보기 ↗`);
-      history.addEventListener('click', () => openExplorer('places', city.id));
+      const history = element('button', 'text-button', `${city.name}의 장소별 역사 ↗`);
+      history.addEventListener('click', () => openPlaceMap(city.id));
       popup.append(history);
     }
     doc.querySelectorAll('.map-marker').forEach(node => node.setAttribute('aria-pressed', String(node.getAttribute('data-place-id') === place.id)));
@@ -254,6 +273,40 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
     $('#map').focus();
   }
   function openExplorer(section = 'timeline', id = null) { stop(); explorer.open(section, id); }
+  function openPlaceMap(cityId) {
+    stop();
+    compareView.close();
+    placeMapView.open(cityId);
+  }
+  function openComparison(leftId, rightId) {
+    stop();
+    placeMapView.close();
+    compareView.open(leftId, rightId);
+  }
+  function openMapToolScene(snapshot, place) {
+    const index = SNAPSHOTS.indexOf(snapshot);
+    if (index < 0) return;
+    selectSnapshot(index);
+    if (place) showPlaceOnMap(place);
+    else $('#map').focus();
+  }
+  async function shareMapTool(tool, parameters) {
+    const hash = `#${tool}?${new URLSearchParams(parameters)}`;
+    const dialog = $(tool === 'places' ? '#places-map-dialog' : '#compare-dialog');
+    const footer = dialog.querySelector('.map-tool-footer');
+    const status = footer.querySelector('.map-tool-share-status') || element('p', 'map-tool-share-status');
+    status.setAttribute('role', 'status');
+    footer.append(status);
+    try {
+      const url = new URL(win.location.href);
+      url.hash = hash;
+      await win.navigator.clipboard.writeText(url.href);
+      status.textContent = '링크를 복사했습니다.';
+    } catch {
+      try { win.history.replaceState(null, '', hash); } catch { /* Local-file restrictions. */ }
+      status.textContent = '주소창의 링크를 복사해 주세요.';
+    }
+  }
   function zoomTo(next, anchor = [500, 450]) {
     const clamped = Math.min(4, Math.max(0.7, next));
     const ratio = clamped / state.zoom;
@@ -816,6 +869,11 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
     explorer.searchRecords(query);
   });
   on($('#explore-open'), 'click', () => openExplorer());
+  on($('#places-map-open'), 'click', () => openPlaceMap());
+  on($('#compare-open'), 'click', () => {
+    const newer = Math.max(1, state.index);
+    openComparison(SNAPSHOTS[newer - 1].id, SNAPSHOTS[newer].id);
+  });
   on($('#scene-timeline-open'), 'click', () => openExplorer('timeline'));
   on($('#scene-polities-open'), 'click', () => openExplorer('polities'));
   on($('#route-clear'), 'click', () => clearFigureRoute());
@@ -924,6 +982,8 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
   function readHash() {
     const [id, query = ''] = win.location.hash.replace(/^#/, '').split('?');
     const params = new URLSearchParams(query);
+    if (id === 'places') return { tool: 'places', city: params.get('city') };
+    if (id === 'compare') return { tool: 'compare', left: params.get('left'), right: params.get('right') };
     if (id === 'records') return { records: true, id: params.get('record'), filters: { q: params.get('q') || '', collection: params.get('collection') || 'all', fromYear: params.get('from'), toYear: params.get('to'), sort: params.get('sort') || 'asc' } };
     if (!id) return { index: homeSceneIndex };
     const path = readingPathById.get(params.get('path'));
@@ -934,16 +994,29 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
       pathContext: stopIndex >= 0 ? { path, index: stopIndex } : null,
     };
   }
+  function restoreMapTool(hash) {
+    if (!hash.tool) return false;
+    const link = win.location.hash;
+    selectSnapshot(state.index);
+    try { win.history.replaceState(null, '', link); } catch { /* Local-file restrictions. */ }
+    if (hash.tool === 'places') openPlaceMap(hash.city);
+    else openComparison(hash.left, hash.right);
+    return true;
+  }
   on(win, 'hashchange', () => {
     const hash = readHash();
+    if (restoreMapTool(hash)) return;
+    placeMapView.close();
+    compareView.close();
     if (hash.records) { openRecords(hash.id, hash.filters); return; }
     if (hash.index >= 0) selectSnapshot(hash.index, true, hash.pathContext);
     if (hash.figure) showFigureRoute(hash.figure);
   });
   const initialHash = readHash();
   const hashIndex = initialHash.index;
+  const restoredTool = restoreMapTool(initialHash);
   if (initialHash.records) openRecords(initialHash.id, initialHash.filters);
-  else {
+  else if (!restoredTool) {
     selectSnapshot(hashIndex >= 0 ? hashIndex : state.index, true, initialHash.pathContext);
     if (initialHash.figure) showFigureRoute(initialHash.figure);
   }
@@ -961,14 +1034,16 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
     for (const feature of geography.features) {
       const polygons = feature.geometry.type === 'MultiPolygon' ? feature.geometry.coordinates : [feature.geometry.coordinates];
       const d = polygons.flatMap(polygon => polygon.map(ring => ring.map((coord, index) => `${index ? 'L' : 'M'}${project(coord).map(number => number.toFixed(2)).join(',')}`).join(' ') + 'Z')).join(' ');
-      $('#land-layer').append(svgElement('path', { class: 'land', d, 'fill-rule': 'evenodd' }));
+      landLayer.append(svgElement('path', { class: 'land', d, 'fill-rule': 'evenodd' }));
     }
+    placeMapView.refreshMap();
+    compareView.refreshMap();
     $('#map-load-status').hidden = true;
   } catch {
     $('#map-load-status').hidden = false;
     $('#map-load-status').textContent = '해안선 지도를 불러오지 못했습니다. 시대 선택·사건·출처는 계속 이용할 수 있습니다.';
   }
-  return { selectSnapshot, stop, explorer, recordBrowser, get state() { return { ...state }; }, destroy() { destroyed = true; stop(); explorer.destroy(); recordBrowser.dispose(); recordView.destroy(); distributionView.destroy(); if (!corpusStore) corpus.dispose(); clearTimeout(toastTimer); clearTimeout(sliderTimer); listeners.forEach(remove => remove()); } };
+  return { selectSnapshot, stop, explorer, recordBrowser, get state() { return { ...state }; }, destroy() { destroyed = true; stop(); explorer.destroy(); placeMapView.destroy(); compareView.destroy(); recordBrowser.dispose(); recordView.destroy(); distributionView.destroy(); if (!corpusStore) corpus.dispose(); clearTimeout(toastTimer); clearTimeout(sliderTimer); listeners.forEach(remove => remove()); } };
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
