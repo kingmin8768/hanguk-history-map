@@ -115,3 +115,33 @@ test('year locate chooses the nearest known year with earlier-year ties and firs
   assert.equal(corpus.locate({ year: 1100, fromYear: 1101 }).record.id, 'late-a');
   assert.equal(corpus.locate({ year: 1100, q: 'unknown' }), null);
 });
+
+test('distribution counts every same-year row and undated record in numeric ascending years regardless of sort', () => {
+  const corpus = index([
+    record('late-a', 1446), record('bce', -57), record('late-b', 1446),
+    record('ten', 10), record('two', 2), record('unknown', null), record('zero', 0)
+  ]);
+  assert.equal(typeof corpus.distribution, 'function');
+  const expected = { total: 7, years: [{ year: -57, count: 1 }, { year: 2, count: 1 }, { year: 10, count: 1 }, { year: 1446, count: 2 }], undated: 2 };
+  assert.deepEqual(corpus.distribution(), expected);
+  assert.deepEqual(corpus.distribution({ sort: 'desc' }), expected);
+  assert.equal(corpus.query({ limit: 1 }).total, 7);
+});
+
+test('distribution shares normalized text, collection and inclusive year filters with query without pagination', () => {
+  const corpus = index([
+    record('first', 1446, { title: '훈민정음 ＡＢＣ', body: '백성에게 문자를 알리다', originalDate: '세종 28년 9월', collectionId: 'letters' }),
+    record('second', 1446, { title: '훈민정음 abc', body: '문자 기록', collectionId: 'letters' }),
+    record('older', 1443, { title: '훈민정음 abc', body: '문자 기록', collectionId: 'letters' }),
+    record('unknown', null, { title: 'ABC 문자', collectionId: 'letters' }),
+    record('other', 1446, { title: 'ABC 문자', collectionId: 'other' })
+  ]);
+  assert.equal(typeof corpus.distribution, 'function');
+  const filters = { q: '  abc 문자  ', collection: 'letters', fromYear: 1446, toYear: 1446, sort: 'desc' };
+  assert.equal(corpus.query({ ...filters, limit: 1 }).total, 2);
+  assert.deepEqual(corpus.distribution({ ...filters, offset: 99999, limit: 1 }), { total: 2, years: [{ year: 1446, count: 2 }], undated: 0 });
+  assert.deepEqual(corpus.distribution({ q: 'abc 문자', collection: 'letters' }), { total: 4, years: [{ year: 1443, count: 1 }, { year: 1446, count: 2 }], undated: 1 });
+  assert.deepEqual(corpus.distribution({ q: '세종 9월' }), { total: 1, years: [{ year: 1446, count: 1 }], undated: 0 });
+  assert.deepEqual(corpus.distribution({ q: '일치하지않음' }), { total: 0, years: [], undated: 0 });
+  assert.deepEqual(corpus.distribution({ fromYear: 1500, toYear: 1400 }), { total: 0, years: [], undated: 0 });
+});

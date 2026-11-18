@@ -92,6 +92,18 @@ export function createCorpusIndex(records) {
       const items = matches.slice(start, start + pageSize).map(index => records[index]);
       return { items, total, offset: start, limit: pageSize };
     },
+    distribution(filters = {}) {
+      const matches = matchingIndices(filters);
+      const counts = new Map();
+      let undated = 0;
+      for (let position = 0; position < matches.length; position++) {
+        const year = years[matches[position]];
+        if (year === null) undated++;
+        else counts.set(year, (counts.get(year) ?? 0) + 1);
+      }
+      const bins = Array.from(counts, ([year, count]) => ({ year, count })).sort((a, b) => a.year - b.year);
+      return { total: matches.length, years: bins, undated };
+    },
     locate({ id, year, ...filters } = {}) {
       const matches = matchingIndices(filters);
       let position = -1;

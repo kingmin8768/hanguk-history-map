@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { parseHTML } from 'linkedom';
 import { initAtlas } from '../dist/app.js';
 import { FIGURES } from '../dist/data.js';
+import { READING_PATHS } from '../dist/reading-paths-data.js';
 import { createCorpusIndex } from '../dist/corpus-query.js';
 
 const html = await readFile(new URL('../dist/index.html', import.meta.url), 'utf8');
@@ -21,7 +22,7 @@ async function setup(hash = '', overrides = {}) {
   window.location = { hash, href: `https://example.org/${hash}` };
   window.history = { replaceState(_state, _title, value) { window.location.hash = value; } };
   const index = createCorpusIndex(records);
-  const corpusStore = { getManifest: async () => manifest, query: async query => index.query(query), getRecord: async id => index.getRecord(id), locate: async query => index.locate(query), dispose() {}, ...overrides };
+  const corpusStore = { getManifest: async () => manifest, query: async query => index.query(query), getRecord: async id => index.getRecord(id), locate: async query => index.locate(query), distribution: async query => index.distribution(query), dispose() {}, ...overrides };
   const atlas = await initAtlas({ document, window, corpusStore, fetch: async () => ({ ok: true, json: async () => ({ features: [] }) }) });
   await flush();
   const submit = selector => document.querySelector(selector).dispatchEvent(new window.Event('submit', { cancelable: true }));
@@ -157,5 +158,57 @@ test('clearing an inactive biography overlay preserves the current record URL an
   assert.equal(window.location.hash, hash);
   assert.equal(atlas.state.mode, 'records');
   assert.equal(document.querySelectorAll('.map-marker,.figure-route-stop').length, 0);
+  atlas.destroy();
+});
+
+test('record distribution reflects the current filters and clicking a bin preserves search context', async () => {
+  const { document, window, atlas, submit } = await setup();
+  const panel = document.querySelector('#record-distribution');
+  panel.setAttribute('open', '');
+  panel.dispatchEvent(new window.Event('toggle'));
+  await flush();
+  assert.match(document.querySelector('#distribution-caption').textContent, /4건/);
+  assert.equal([...document.querySelectorAll('.distribution-bar-count')].reduce((sum, node) => sum + Number(node.textContent), 0), 4);
+  document.querySelector('#record-query').value = '해방';
+  submit('#main-record-filters');
+  await flush();
+  const bar = document.querySelector('.distribution-bar');
+  assert.match(bar.getAttribute('aria-label'), /1945년.*2건/);
+  bar.dispatchEvent(new window.Event('click', { bubbles: true }));
+  await flush();
+  assert.equal(atlas.recordBrowser.state.filters.q, '해방');
+  assert.equal(atlas.recordBrowser.state.filters.fromYear, 1945);
+  assert.equal(atlas.recordBrowser.state.filters.toYear, 1945);
+  document.querySelector('#distribution-reset').click();
+  await flush();
+  assert.equal(atlas.recordBrowser.state.filters.fromYear, null);
+  assert.equal(atlas.recordBrowser.state.filters.q, '해방');
+  document.querySelector('#browse-scenes').click();
+  assert.equal(panel.hidden, true);
+  assert.equal(panel.hasAttribute('open'), false);
+  atlas.destroy();
+});
+
+test('thematic reading opens sourced scenes, advances in the same path and restores a shared stop', async () => {
+  const { document, window, atlas } = await setup();
+  const path = READING_PATHS[0];
+  document.querySelector('#reading-paths-open').click();
+  assert.ok(document.querySelector('#reading-paths-dialog[open]'));
+  assert.equal(document.querySelectorAll('.reading-path-card').length, READING_PATHS.length);
+  document.querySelector('.reading-path-card').click();
+  assert.equal(document.querySelectorAll('.reading-path-stops li').length, path.stops.length);
+  document.querySelector('.reading-path-stops button').click();
+  assert.equal(atlas.state.mode, 'scenes');
+  assert.equal(document.querySelector('#active-reading-path').hidden, false);
+  assert.equal(document.querySelector('#reading-path-note').textContent, path.stops[0].note);
+  assert.ok(document.querySelector('#snapshot-sources a'));
+  document.querySelector('#reading-path-next').click();
+  assert.equal(window.location.hash, `#${path.stops[1].snapshotId}?path=${path.id}`);
+  const restored = await setup(window.location.hash);
+  assert.equal(restored.document.querySelector('#reading-path-progress').textContent, `2 / ${path.stops.length}`);
+  restored.document.querySelector('#reading-path-exit').click();
+  assert.equal(restored.window.location.hash, `#${path.stops[1].snapshotId}`);
+  assert.equal(restored.document.querySelector('#active-reading-path').hidden, true);
+  restored.atlas.destroy();
   atlas.destroy();
 });

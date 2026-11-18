@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
+import { createCorpusIndex } from '../dist/corpus-query.js';
 
 const manifest = JSON.parse(await readFile(new URL('../dist/corpus/manifest.json', import.meta.url), 'utf8'));
 const compressed = await readFile(new URL(`../dist/corpus/${manifest.data.path}`, import.meta.url));
@@ -19,6 +20,16 @@ test('the deployed official corpus matches its reproducible manifest and license
   assert.equal(manifest.dataset.id, '15051036');
   assert.match(manifest.dataset.license.name, /1/);
   assert.match(manifest.dataset.license.attribution, /국사편찬위원회/);
+});
+
+test('the lightweight initial page exactly matches the full corpus query in the default order', async () => {
+  const { path, sha256, byteLength, limit } = manifest.firstPage;
+  const fastPage = await readFile(new URL(`../dist/corpus/${path}`, import.meta.url));
+  assert.equal(fastPage.length, byteLength);
+  assert.equal(createHash('sha256').update(fastPage).digest('hex'), sha256);
+  const page = JSON.parse(fastPage);
+  assert.equal(page.schemaVersion, manifest.schemaVersion);
+  assert.deepEqual(page.records, createCorpusIndex(records).query({ limit }).items);
 });
 
 test('all imported entries retain stable IDs, original dates and current official source URLs', () => {

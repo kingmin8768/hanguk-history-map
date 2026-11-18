@@ -234,6 +234,26 @@ def write_pack(records, output):
     }
 
 
+def write_first_page(records, output):
+    """Write the default ascending page without changing the full pack's order."""
+    def order_key(record):
+        year = record.get("year")
+        return (0, year) if type(year) is int and year != 0 else (1, 0)
+
+    limit = 50
+    # Python's stable sort retains input order for records with the same year.
+    page = sorted(records, key=order_key)[:limit]
+    payload = json.dumps({"schemaVersion": 1, "records": page}, ensure_ascii=False,
+                         separators=(",", ":")).encode("utf-8")
+    output.write_bytes(payload)
+    return {
+        "path": output.name,
+        "sha256": hashlib.sha256(payload).hexdigest(),
+        "byteLength": len(payload),
+        "limit": limit,
+    }
+
+
 def build_manifest(records, counts, source, data, retrieved_at):
     years = Counter(record["year"] for record in records if record["year"] is not None)
     grouped = {}
@@ -293,7 +313,7 @@ def write_readme(path, manifest):
 
 ## 파일과 필드
 
-`manifest.json`은 실제 수록 수·분야별 수·연도별 수·원본 및 압축 파일 해시를 제공한다. `records.json.gz`는 gzip mtime=0으로 생성한 UTF-8 JSON `{{schemaVersion:1,records:[...]}}`이다. 압축을 해제한 별도 JSON과 대용량 원본 ZIP/CSV는 저장소에 넣지 않는다.
+`manifest.json`은 실제 수록 수·분야별 수·연도별 수·원본 및 압축 파일 해시를 제공한다. `records.json.gz`는 gzip mtime=0으로 생성한 UTF-8 JSON `{{schemaVersion:1,records:[...]}}`이다. `first-page.json`은 같은 형식으로 기본 오름차순의 첫 50건만 담으며, `manifest.firstPage`에 파일 경로·SHA-256·바이트 수·한도를 기록한다. 유효한 0이 아닌 정수 연도를 수치순으로 정렬하고 연도 미상은 뒤에 두며, 같은 연도는 전체 자료팩의 순서를 유지한다. 전체 압축을 해제한 별도 JSON과 대용량 원본 ZIP/CSV는 저장소에 넣지 않는다.
 
 개별 기록은 `id`, `sourceRecordId`, `year`, `originalDate`, `title`, `body`, `collectionId`, `sourceUrl`, `sourceLinkType`, `originalMetadataUrl`, `calendar`, `precision`을 갖는다. `id`는 원본 통합 메타데이터 ID, `sourceRecordId`는 원래 제공기관 기사 ID다. 빈 초록을 새 문장으로 채우지 않았으며 제공 제목은 중간에 잘려 있을 수 있다. 본문은 원본 `초록` 그대로다.
 
@@ -332,6 +352,7 @@ def import_archive(source, output_dir, retrieved_at):
     output_dir.mkdir(parents=True, exist_ok=True)
     data = write_pack(records, output_dir / "records.json.gz")
     manifest = build_manifest(records, counts, source, data, retrieved_at)
+    manifest["firstPage"] = write_first_page(records, output_dir / "first-page.json")
     (output_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     write_readme(output_dir / "README.md", manifest)
     return manifest

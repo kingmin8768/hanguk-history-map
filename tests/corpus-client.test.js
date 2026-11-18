@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { gzipSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 
 const module = await import('../dist/corpus-client.js').catch(() => ({}));
 const manifest = { schemaVersion: 1, recordCount: 3, dataset: { id: '15051036', title: '공식 연표', provider: '제공기관', landingUrl: 'https://example.org/dataset', license: { name: '공공누리 제1유형', url: 'https://example.org/license', attribution: '제공기관' } }, collections: [{ id: 'a', label: '자료', count: 3, fromYear: -57, toYear: 1446 }], coverage: { fromYear: -57, toYear: 1446 }, data: { path: 'records.json.gz', compression: 'gzip', sha256: 'fixture-sha256', byteLength: 123, uncompressedByteLength: 456 } };
@@ -16,6 +17,36 @@ class ControlledWorker extends EventTarget {
   crash() { this.dispatchEvent(Object.assign(new Event('error'), { message: 'Worker failed' })); }
 }
 const tick = () => new Promise(resolve => setImmediate(resolve));
+async function until(condition) {
+  const deadline = Date.now() + 1000;
+  while (!condition() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 1));
+  assert.ok(condition(), 'asynchronous request became observable');
+}
+function bootstrapFixture(records = Array.from({ length: 50 }, (_, n) => ({ ...fixtureRecord, id: `boot-${n}`, sourceRecordId: String(n), year: 1000 + Math.floor(n / 3) }))) {
+  const bytes = new TextEncoder().encode(JSON.stringify({ schemaVersion: 1, records }));
+  const firstPage = { path: 'first-page.json', sha256: createHash('sha256').update(bytes).digest('hex'), byteLength: bytes.byteLength, limit: 50 };
+  return { bytes, records, metadata: { ...manifest, recordCount: 123, firstPage } };
+}
+function setupBootstrap({ fixture = bootstrapFixture(), fetchPage, options = {} } = {}) {
+  const fetched = [];
+  const environment = setup({
+    ...options,
+    fetchResource: async (url, init) => {
+      fetched.push({ url: String(url), init });
+      if (new URL(url).pathname.endsWith('/manifest.json')) return new Response(JSON.stringify(fixture.metadata));
+      return fetchPage ? fetchPage(url, init) : new Response(fixture.bytes);
+    }
+  });
+  return { ...environment, fetched, fixture };
+}
+async function completeQuery(environment, pending, result = { items: [fixtureRecord], total: 123, offset: 0, limit: 50 }) {
+  await until(() => environment.workers[0]?.sent.some(request => request.type === 'load'));
+  const worker = environment.workers[0];
+  worker.reply(worker.sent.find(request => request.type === 'load'), { recordCount: 123 });
+  await until(() => worker.sent.some(request => request.type === 'query'));
+  worker.reply(worker.sent.find(request => request.type === 'query'), result);
+  return pending;
+}
 function setup(extra = {}) {
   assert.equal(typeof module.createCorpusStore, 'function');
   const workers = []; const fetched = [];
@@ -113,6 +144,7 @@ test('dispose terminates the worker and rejects pending and future work', async 
   await assert.rejects(store.query(), /종료|disposed/i);
   await assert.rejects(store.getRecord('first'), /종료|disposed/i);
   await assert.rejects(store.locate({ id: 'first' }), /종료|disposed/i);
+  await assert.rejects(store.distribution(), /종료|disposed/i);
   await assert.rejects(store.getManifest(), /종료|disposed/i);
 });
 
@@ -127,6 +159,150 @@ test('locate routes only its target and filter context to the worker and correla
   worker.reply(request, { index: 9, total: 30, record: fixtureRecord });
   assert.deepEqual(await pending, { index: 9, total: 30, record: fixtureRecord });
   await store.dispose();
+});
+
+test('distribution lazily loads the worker and correlates filtered aggregate replies without requesting records', async () => {
+  const { store, workers, fetched } = setup();
+  assert.equal(typeof store.distribution, 'function');
+  const filters = { q: '문자', collection: 'a', fromYear: -57, toYear: 1446, sort: 'desc' };
+  const older = store.distribution(filters);
+  await tick();
+  const worker = workers[0];
+  const load = worker.sent.find(request => request.type === 'load');
+  worker.reply(load, { recordCount: 3 });
+  await tick();
+  const oldRequest = worker.sent.find(request => request.type === 'distribution');
+  assert.deepEqual(oldRequest.payload, filters);
+  const newer = store.distribution({ q: '빈 검색' });
+  await tick();
+  const newRequest = worker.sent.find(request => request.type === 'distribution' && request.id !== oldRequest.id);
+  worker.reply(newRequest, { total: 0, years: [], undated: 0 });
+  worker.reply(oldRequest, { total: 3, years: [{ year: -57, count: 1 }, { year: 1446, count: 2 }], undated: 0 });
+  assert.deepEqual(await newer, { total: 0, years: [], undated: 0 });
+  assert.deepEqual(await older, { total: 3, years: [{ year: -57, count: 1 }, { year: 1446, count: 2 }], undated: 0 });
+  assert.deepEqual(worker.sent.map(request => request.type), ['load', 'distribution', 'distribution']);
+  assert.equal(fetched.length, 1);
+  await store.dispose();
+});
+
+test('a valid first page answers unfiltered startup with exact totals and effective limits without creating a worker', async () => {
+  const environment = setupBootstrap();
+  const { store, workers, fetched, fixture } = environment;
+  const initial = store.query().catch(error => error);
+  try {
+    await tick();
+    assert.equal(workers.length, 0);
+    const result = await initial;
+    assert.deepEqual([result.total, result.offset, result.limit, result.items.length], [123, 0, 50, 50]);
+    assert.deepEqual(result.items, fixture.records);
+    assert.deepEqual((await store.query({ limit: 7 })).items, fixture.records.slice(0, 7));
+    const equivalent = await store.query({ q: '　 ', collection: '', fromYear: '', toYear: 0, offset: -9, limit: 0, sort: 'other' });
+    assert.deepEqual([equivalent.total, equivalent.offset, equivalent.limit, equivalent.items.length], [123, 0, 1, 1]);
+    assert.equal(fetched.length, 2);
+    assert.equal(new URL(fetched[1].url).searchParams.get('v'), fixture.metadata.firstPage.sha256);
+    assert.equal(workers.length, 0);
+  } finally { await store.dispose(); }
+});
+
+test('search, collection, years, descending order, offsets and larger pages use exact worker queries', async () => {
+  for (const options of [{ q: '문자' }, { collection: 'a' }, { fromYear: 1000 }, { toYear: 1400 }, { sort: 'desc' }, { offset: 1 }, { limit: 51 }]) {
+    const environment = setupBootstrap();
+    const pending = environment.store.query(options);
+    try {
+      await completeQuery(environment, pending);
+      assert.deepEqual(environment.workers[0].sent.find(request => request.type === 'query').payload, options);
+      assert.equal(environment.fetched.length, 1);
+    } finally { await environment.store.dispose(); }
+  }
+});
+
+test('bootstrap network, shape, byte length and integrity failures quietly fall back to the worker', async () => {
+  for (const kind of ['network', 'shape', 'size', 'hash']) {
+    const fixture = kind === 'shape' ? bootstrapFixture([fixtureRecord]) : bootstrapFixture();
+    if (kind === 'size') fixture.metadata.firstPage.byteLength++;
+    if (kind === 'hash') fixture.metadata.firstPage.sha256 = '0'.repeat(64);
+    const environment = setupBootstrap({ fixture, fetchPage: kind === 'network' ? async () => { throw new Error('network unavailable'); } : undefined });
+    const pending = environment.store.query();
+    try {
+      const result = await completeQuery(environment, pending);
+      assert.deepEqual([result.total, result.items[0].id], [123, 'first']);
+    } finally { await environment.store.dispose(); }
+  }
+});
+
+test('a stalled first page is aborted and falls back while disposal rejects a pending bootstrap', async () => {
+  let signal;
+  const environment = setupBootstrap({ options: { bootstrapTimeoutMs: 10 }, fetchPage: async (_url, init) => { signal = init.signal; return new Promise(() => {}); } });
+  const pending = environment.store.query();
+  try {
+    await completeQuery(environment, pending);
+    assert.equal(signal?.aborted, true);
+  } finally { await environment.store.dispose(); }
+
+  const disposed = setupBootstrap({ fetchPage: async () => new Promise(() => {}) });
+  const waiting = disposed.store.query().then(value => value, error => error);
+  await until(() => disposed.fetched.length === 2);
+  await disposed.store.dispose();
+  assert.equal((await waiting).code, 'CORPUS_DISPOSED');
+  assert.equal(disposed.workers.length, 0);
+});
+
+test('valid manifest year coverage answers default and year-only distributions without a worker', async () => {
+  const metadata = { ...manifest, recordCount: 7, counts: { withoutParsedYear: 2 }, coverage: { years: [{ year: -57, count: 1 }, { year: 1000, count: 1 }, { year: 1446, count: 3 }] } };
+  const { store, workers } = setup({ fetchResource: async () => new Response(JSON.stringify(metadata)) });
+  const pending = store.distribution().catch(error => error);
+  try {
+    await tick();
+    assert.equal(workers.length, 0);
+    assert.deepEqual(await pending, { total: 7, years: metadata.coverage.years, undated: 2 });
+    assert.deepEqual(await store.distribution({ fromYear: 1000, toYear: 1446, sort: 'desc' }), { total: 4, years: [{ year: 1000, count: 1 }, { year: 1446, count: 3 }], undated: 0 });
+    assert.deepEqual(await store.distribution({ fromYear: 1500, toYear: 1400 }), { total: 0, years: [], undated: 0 });
+    assert.equal(workers.length, 0);
+  } finally { await store.dispose(); }
+});
+
+test('invalid coverage and text or collection filters still request worker distribution', async () => {
+  for (const { filters, years } of [
+    { filters: { q: '문자' }, years: [{ year: 1446, count: 3 }] },
+    { filters: { collection: 'a' }, years: [{ year: 1446, count: 3 }] },
+    { filters: {}, years: [{ year: 1446, count: 4 }] },
+    { filters: {}, years: [{ year: null, count: 3 }] },
+    { filters: {}, years: [{ year: 1446, count: 1 }, { year: 1446, count: 2 }] }
+  ]) {
+    const metadata = { ...manifest, coverage: { years } };
+    const { store, workers } = setup({ fetchResource: async () => new Response(JSON.stringify(metadata)) });
+    const pending = store.distribution(filters);
+    try {
+      await until(() => workers[0]?.sent.some(request => request.type === 'load'));
+      const worker = workers[0];
+      worker.reply(worker.sent[0], { recordCount: 3 });
+      await until(() => worker.sent.some(request => request.type === 'distribution'));
+      const request = worker.sent.find(request => request.type === 'distribution');
+      assert.deepEqual(request.payload, filters);
+      worker.reply(request, { total: 0, years: [], undated: 0 });
+      assert.equal((await pending).total, 0);
+    } finally { await store.dispose(); }
+  }
+});
+
+test('a stalled worker load times out all waiting work and retry creates a fresh worker', async () => {
+  const { store, workers } = setup({ loadTimeoutMs: 10 });
+  const first = store.query().then(value => value, error => error);
+  const second = store.getRecord('first').then(value => value, error => error);
+  try {
+    await new Promise(resolve => setTimeout(resolve, 30));
+    assert.equal(workers[0].terminated, true);
+    assert.equal((await first).code, 'CORPUS_LOAD_TIMEOUT');
+    assert.equal((await second).code, 'CORPUS_LOAD_TIMEOUT');
+    const retried = store.query();
+    await tick();
+    assert.equal(workers.length, 2);
+    const worker = workers[1];
+    worker.reply(worker.sent[0], { recordCount: 3 });
+    await tick();
+    worker.reply(worker.sent.find(request => request.type === 'query'), { items: [fixtureRecord], total: 1, offset: 0, limit: 50 });
+    assert.equal((await retried).items[0].id, 'first');
+  } finally { await store.dispose(); }
 });
 
 test('manifest network errors retry and unsupported workers return an actionable error', async () => {
@@ -186,6 +362,8 @@ test('real worker decompresses a gzip fixture, answers query/get, and retries af
     assert.equal((await request(5, 'get', { id: 'missing' })).result, null);
     const located = (await request(6, 'locate', { year: 1445 })).result;
     assert.deepEqual([located.index, located.total, located.record.id], [0, 1, 'first']);
+    assert.deepEqual((await request(7, 'distribution', { q: '문자', collection: 'a', sort: 'desc' })).result, { total: 1, years: [{ year: 1446, count: 1 }], undated: 0 });
+    assert.deepEqual((await request(8, 'distribution', { fromYear: 1500 })).result, { total: 0, years: [], undated: 0 });
   } finally {
     globalThis.self = originalSelf;
     globalThis.fetch = originalFetch;

@@ -20,7 +20,7 @@
 
 ## 파일과 필드
 
-`manifest.json`은 실제 수록 수·분야별 수·연도별 수·원본 및 압축 파일 해시를 제공한다. `records.json.gz`는 gzip mtime=0으로 생성한 UTF-8 JSON `{schemaVersion:1,records:[...]}`이다. 압축을 해제한 별도 JSON과 대용량 원본 ZIP/CSV는 저장소에 넣지 않는다.
+`manifest.json`은 실제 수록 수·분야별 수·연도별 수·원본 및 압축 파일 해시를 제공한다. `records.json.gz`는 gzip mtime=0으로 생성한 UTF-8 JSON `{schemaVersion:1,records:[...]}`이다. `first-page.json`은 같은 형식으로 기본 오름차순의 첫 50건만 담으며, `manifest.firstPage`에 파일 경로·SHA-256·바이트 수·한도를 기록한다. 유효한 0이 아닌 정수 연도를 수치순으로 정렬하고 연도 미상은 뒤에 두며, 같은 연도는 전체 자료팩의 순서를 유지한다. 전체 압축을 해제한 별도 JSON과 대용량 원본 ZIP/CSV는 저장소에 넣지 않는다.
 
 개별 기록은 `id`, `sourceRecordId`, `year`, `originalDate`, `title`, `body`, `collectionId`, `sourceUrl`, `sourceLinkType`, `originalMetadataUrl`, `calendar`, `precision`을 갖는다. `id`는 원본 통합 메타데이터 ID, `sourceRecordId`는 원래 제공기관 기사 ID다. 빈 초록을 새 문장으로 채우지 않았으며 제공 제목은 중간에 잘려 있을 수 있다. 본문은 원본 `초록` 그대로다.
 

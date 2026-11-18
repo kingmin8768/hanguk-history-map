@@ -143,6 +143,49 @@ class OfficialImportTests(unittest.TestCase):
                 self.assertEqual(records[0]["sourceUrl"], "https://db.history.go.kr/id/" + current_id)
                 self.assertEqual(records[0]["body"], "")
 
+    def test_first_page_sorts_numeric_years_stably_and_keeps_unknown_years_last(self):
+        # Catches lexicographic years, ID-based tie breaking, and treating zero as a year.
+        self.assertTrue(callable(getattr(self.module, "write_first_page", None)),
+                        "The importer does not emit the lightweight first page")
+        records = [
+            {"id": "unknown-first", "year": None, "body": "원문"},
+            {"id": "ten", "year": 10},
+            {"id": "two-z", "year": 2},
+            {"id": "zero", "year": 0},
+            {"id": "bce", "year": -2333},
+            {"id": "two-a", "year": 2},
+            {"id": "string-year", "year": "1"},
+            {"id": "fraction", "year": 1.5},
+            {"id": "boolean", "year": True},
+        ]
+        original = [dict(record) for record in records]
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "first-page.json"
+            metadata = self.module.write_first_page(records, output)
+            binary = output.read_bytes()
+            document = json.loads(binary)
+            self.assertEqual(document["schemaVersion"], 1)
+            self.assertEqual([record["id"] for record in document["records"]], [
+                "bce", "two-z", "two-a", "ten", "unknown-first", "zero",
+                "string-year", "fraction", "boolean",
+            ])
+            self.assertEqual(document["records"][4]["body"], "원문")
+            self.assertEqual(metadata, {
+                "path": "first-page.json", "sha256": hashlib.sha256(binary).hexdigest(),
+                "byteLength": len(binary), "limit": 50,
+            })
+        self.assertEqual(records, original)
+
+    def test_first_page_caps_default_results_at_fifty_records(self):
+        # Catches accidentally making startup fetch the entire collection again.
+        self.assertTrue(callable(getattr(self.module, "write_first_page", None)),
+                        "The importer does not emit the lightweight first page")
+        records = [{"id": str(index), "year": 100} for index in range(53)]
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "first-page.json"
+            self.module.write_first_page(records, output)
+            self.assertEqual(json.loads(output.read_bytes())["records"], records[:50])
+
     def test_archive_cli_emits_verified_deterministic_gzip_and_counts(self):
         # Exercises the actual importer against quoted/multiline CSV, the artifact and its manifest.
         with tempfile.TemporaryDirectory() as temporary:
@@ -174,9 +217,17 @@ class OfficialImportTests(unittest.TestCase):
             self.assertEqual(manifest["dataset"]["id"], "15051036")
             self.assertEqual(manifest["counts"]["calendar"], {"lunar": 1, "unspecified": 1})
             self.assertFalse((output / "records.json").exists())
+            self.assertIn("firstPage", manifest)
+            first_page = (output / "first-page.json").read_bytes()
+            self.assertEqual(json.loads(first_page), document)
+            self.assertEqual(manifest["firstPage"], {
+                "path": "first-page.json", "sha256": hashlib.sha256(first_page).hexdigest(),
+                "byteLength": len(first_page), "limit": 50,
+            })
             second = subprocess.run(command, text=True, capture_output=True)
             self.assertEqual(second.returncode, 0, second.stderr)
             self.assertEqual(binary, (output / "records.json.gz").read_bytes())
+            self.assertEqual(first_page, (output / "first-page.json").read_bytes())
 
 
 if __name__ == "__main__":

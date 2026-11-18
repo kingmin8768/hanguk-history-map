@@ -6,6 +6,8 @@ import { buildCityHistories, searchCatalogue } from './catalogue.js';
 import { createCorpusStore } from './corpus-client.js';
 import { createRecordBrowser } from './record-browser.js';
 import { createMainRecordView } from './main-record-view.js';
+import { createDistributionView } from './distribution-view.js';
+import { READING_PATHS } from './reading-paths-data.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -33,6 +35,17 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
   const sceneFirst = SNAPSHOTS[0].year;
   const sceneLast = SNAPSHOTS.at(-1).year;
   const eraRanges = [[null, 313], [314, 697], [698, 899], [900, 935], [936, 1391], [1392, 1591], [1592, 1637], [1638, 1875], [1876, 1896], [1897, 1909], [1910, 1944], [1945, 1987], [1988, null]];
+  const readingPathById = new Map(READING_PATHS.map(path => [path.id, path]));
+  let readingPath = null;
+  const distributionView = createDistributionView({
+    panel: $('#record-distribution'),
+    corpus,
+    eras: ERAS.map((era, index) => ({ label: era.label, from: eraRanges[index][0], to: eraRanges[index][1] })),
+    onSelectRange(fromYear, toYear) {
+      stop();
+      recordBrowser.setFilters({ fromYear, toYear });
+    },
+  });
   const listeners = [];
   function on(target, type, callback, options) {
     target.addEventListener(type, callback, options);
@@ -164,7 +177,7 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
     if (refit && state.mode === 'scenes') {
       closePopup();
       fitPoints(SNAPSHOTS[state.index].places.map(place => project(place.coord)));
-      try { win.history.replaceState(null, '', `#${SNAPSHOTS[state.index].id}`); } catch { /* Local-file restrictions. */ }
+      writeSceneHash(SNAPSHOTS[state.index]);
     }
   }
   function showFigureRoute(figure) {
@@ -382,6 +395,7 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
     $('#record-controls').hidden = !records;
     $('#record-content').hidden = !records;
     $('#record-map-note').hidden = !records;
+    distributionView.setVisible(records);
     doc.querySelectorAll('.scene-only').forEach(node => { node.hidden = records; });
     $('.map-layers').hidden = records;
     $('#browse-counter-label').textContent = records ? '선택한 목록의 기록' : '지도 해설';
@@ -391,6 +405,8 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
     $('#share-button').firstChild.textContent = records ? '현재 기록 링크 ' : '현재 장면 링크 ';
     $('#map').setAttribute('aria-label', records ? '선택한 기록의 좌표가 없는 참고 해안선 지도' : '역사적 수도와 사건 위치 지도');
     if (records) {
+      readingPath = null;
+      renderReadingProgress();
       $('#year-input').removeAttribute('min');
       $('#year-input').removeAttribute('max');
       clearFigureRoute(false);
@@ -448,6 +464,7 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
     updateRecordManifest(recordState.manifest);
     if (state.mode !== 'records') return;
     const { record, index, total, status, filters, manifest } = recordState;
+    distributionView.update(filters);
     const ready = status === 'ready';
     const hasRecord = ready && record;
     const filterKey = JSON.stringify(filters);
@@ -515,11 +532,13 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
     if (state.mode === 'records') return direction > 0 ? recordBrowser.next() : recordBrowser.previous();
     selectSnapshot(state.index + direction);
   }
-  function selectSnapshot(index, manual = true) {
+  function selectSnapshot(index, manual = true, pathContext = null) {
     if (manual) stop();
     setBrowseMode('scenes');
     state.index = Math.max(0, Math.min(SNAPSHOTS.length - 1, index));
     const snapshot = SNAPSHOTS[state.index];
+    readingPath = pathContext;
+    renderReadingProgress();
     clearFigureRoute(false);
     closePopup();
     $('#map-title').textContent = snapshot.title;
@@ -536,7 +555,7 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
     renderMap(snapshot);
     fitPoints(snapshot.places.map(place => project(place.coord)));
     explorer?.refresh(snapshot);
-    try { win.history.replaceState(null, '', `#${snapshot.id}`); } catch { /* Static local files may disallow history mutation. */ }
+    writeSceneHash(snapshot);
     doc.title = `${snapshot.title} · ${formatYear(snapshot.year)} | 산하`;
   }
   function openDialog(dialog) {
@@ -550,6 +569,76 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
     else dialog.removeAttribute('open');
     lastFocused?.focus?.();
   }
+  function writeSceneHash(snapshot) {
+    const path = readingPath ? `?path=${encodeURIComponent(readingPath.path.id)}` : '';
+    try { win.history.replaceState(null, '', `#${snapshot.id}${path}`); } catch { /* Local-file restrictions. */ }
+  }
+  function renderReadingProgress() {
+    $('#active-reading-path').hidden = !readingPath;
+    if (!readingPath) return;
+    const { path, index } = readingPath;
+    $('#reading-path-current').textContent = path.title;
+    $('#reading-path-progress').textContent = `${index + 1} / ${path.stops.length}`;
+    $('#reading-path-note').textContent = path.stops[index].note;
+    $('#reading-path-previous').disabled = index === 0;
+    $('#reading-path-next').disabled = index === path.stops.length - 1;
+  }
+  function selectReadingStop(path, index) {
+    const stop = path.stops[index];
+    if (!stop) return;
+    const sceneIndex = SNAPSHOTS.findIndex(snapshot => snapshot.id === stop.snapshotId);
+    if (sceneIndex < 0) return;
+    switchTab('details');
+    selectSnapshot(sceneIndex, true, { path, index });
+    $('#chronicle').scrollTop = 0;
+    $('#chronicle').focus();
+  }
+  function renderReadingPaths(path = null) {
+    const grid = $('#reading-path-grid');
+    const detail = $('#reading-path-detail');
+    grid.hidden = Boolean(path);
+    detail.hidden = !path;
+    if (!path) return grid.querySelector('button');
+    const back = element('button', 'reading-path-back', '← 모든 주제');
+    back.addEventListener('click', () => renderReadingPaths()?.focus());
+    const list = element('ol', 'reading-path-stops');
+    for (const [index, stop] of path.stops.entries()) {
+      const snapshot = SNAPSHOTS.find(scene => scene.id === stop.snapshotId);
+      if (!snapshot) continue;
+      const item = element('li');
+      const button = element('button', '', snapshot.title);
+      button.addEventListener('click', () => {
+        closeDialog($('#reading-paths-dialog'));
+        selectReadingStop(path, index);
+      });
+      item.append(element('time', '', formatYear(snapshot.year)), button, element('p', '', stop.note));
+      if (readingPath?.path === path && readingPath.index === index) button.setAttribute('aria-current', 'step');
+      list.append(item);
+    }
+    detail.replaceChildren(back, element('h3', '', path.title), element('p', '', path.description), list);
+    return back;
+  }
+  function openReadingPaths(path = null) {
+    const focus = renderReadingPaths(path);
+    openDialog($('#reading-paths-dialog'));
+    focus?.focus();
+  }
+  for (const path of READING_PATHS) {
+    const card = element('button', 'reading-path-card');
+    card.append(element('strong', '', path.title), element('span', '', path.description), element('small', '', `${path.stops.length}개 해설`));
+    on(card, 'click', () => renderReadingPaths(path)?.focus());
+    $('#reading-path-grid').append(card);
+  }
+  on($('#reading-paths-open'), 'click', () => openReadingPaths());
+  on($('#reading-path-list'), 'click', () => openReadingPaths(readingPath?.path));
+  on($('#reading-path-previous'), 'click', () => { if (readingPath) selectReadingStop(readingPath.path, readingPath.index - 1); });
+  on($('#reading-path-next'), 'click', () => { if (readingPath) selectReadingStop(readingPath.path, readingPath.index + 1); });
+  on($('#reading-path-exit'), 'click', () => {
+    readingPath = null;
+    renderReadingProgress();
+    writeSceneHash(SNAPSHOTS[state.index]);
+    $('#chronicle').focus();
+  });
   for (const [eraIndex, era] of ERAS.entries()) {
     const button = element('button', 'era-button');
     button.setAttribute('data-era', era.id);
@@ -684,8 +773,8 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
   on($('#route-details'), 'click', () => { if (state.selectedFigure) openExplorer('figures', state.selectedFigure); });
   on($('#search-open'), 'click', () => { openDialog($('#search-dialog')); $('#search-input').focus(); });
   for (const id of ['sources-open', 'method-open']) on($(`#${id}`), 'click', () => openDialog($('#sources-dialog')));
-  doc.querySelectorAll('#search-dialog [data-close], #sources-dialog [data-close]').forEach(button => on(button, 'click', () => closeDialog(button.closest('dialog'))));
-  doc.querySelectorAll('#search-dialog, #sources-dialog').forEach(dialog => {
+  doc.querySelectorAll('#search-dialog [data-close], #sources-dialog [data-close], #reading-paths-dialog [data-close]').forEach(button => on(button, 'click', () => closeDialog(button.closest('dialog'))));
+  doc.querySelectorAll('#search-dialog, #sources-dialog, #reading-paths-dialog').forEach(dialog => {
     on(dialog, 'click', event => { if (event.target === dialog) { const rect = dialog.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeDialog(dialog); } });
   });
   on($('#search-input'), 'input', event => {
@@ -764,7 +853,7 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
   on($('#map'), 'pointercancel', endDrag);
   on($('#map'), 'wheel', event => { event.preventDefault(); zoomTo(state.zoom * (event.deltaY < 0 ? 1.1 : 1 / 1.1), mapPoint(event)); }, { passive: false });
   on(doc, 'keydown', event => {
-    if (/^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(event.target.tagName) || event.target.closest('[role="button"]') || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.target.closest?.('input, select, textarea, button, summary, a, [role="button"], [contenteditable]') || event.ctrlKey || event.metaKey || event.altKey) return;
     if (doc.querySelector('dialog[open]')) return;
     if (event.key === 'ArrowLeft') { event.preventDefault(); step(-1); }
     if (event.key === 'ArrowRight') { event.preventDefault(); step(1); }
@@ -777,19 +866,25 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
     const [id, query = ''] = win.location.hash.replace(/^#/, '').split('?');
     const params = new URLSearchParams(query);
     if (!id || id === 'records') return { records: true, id: params.get('record'), filters: { q: params.get('q') || '', collection: params.get('collection') || 'all', fromYear: params.get('from'), toYear: params.get('to'), sort: params.get('sort') || 'asc' } };
-    return { index: SNAPSHOTS.findIndex(snapshot => snapshot.id === id), figure: figureById.get(params.get('figure')) };
+    const path = readingPathById.get(params.get('path'));
+    const stopIndex = path?.stops.findIndex(stop => stop.snapshotId === id) ?? -1;
+    return {
+      index: SNAPSHOTS.findIndex(snapshot => snapshot.id === id),
+      figure: figureById.get(params.get('figure')),
+      pathContext: stopIndex >= 0 ? { path, index: stopIndex } : null,
+    };
   }
   on(win, 'hashchange', () => {
     const hash = readHash();
     if (hash.records) { openRecords(hash.id, hash.filters); return; }
-    if (hash.index >= 0) selectSnapshot(hash.index);
+    if (hash.index >= 0) selectSnapshot(hash.index, true, hash.pathContext);
     if (hash.figure) showFigureRoute(hash.figure);
   });
   const initialHash = readHash();
   const hashIndex = initialHash.index;
   if (initialHash.records) openRecords(initialHash.id, initialHash.filters);
   else {
-    selectSnapshot(hashIndex >= 0 ? hashIndex : state.index);
+    selectSnapshot(hashIndex >= 0 ? hashIndex : state.index, true, initialHash.pathContext);
     if (initialHash.figure) showFigureRoute(initialHash.figure);
   }
   const labels = [ ['동해', [132.2, 38.2], 'water-label'], ['황해', [122.5, 36.3], 'water-label'], ['남해', [128.5, 32.4], 'water-label'], ['제주', [126.5, 33.1], 'geo-label'], ['한반도', [127.6, 36.4], 'geo-label region-label'], ['만주', [124.8, 43.6], 'geo-label region-label'] ];
@@ -813,7 +908,7 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
     $('#map-load-status').hidden = false;
     $('#map-load-status').textContent = '해안선 지도를 불러오지 못했습니다. 시대 선택·사건·출처는 계속 이용할 수 있습니다.';
   }
-  return { selectSnapshot, stop, explorer, recordBrowser, get state() { return { ...state }; }, destroy() { destroyed = true; stop(); explorer.destroy(); recordBrowser.dispose(); recordView.destroy(); if (!corpusStore) corpus.dispose(); clearTimeout(toastTimer); clearTimeout(sliderTimer); listeners.forEach(remove => remove()); } };
+  return { selectSnapshot, stop, explorer, recordBrowser, get state() { return { ...state }; }, destroy() { destroyed = true; stop(); explorer.destroy(); recordBrowser.dispose(); recordView.destroy(); distributionView.destroy(); if (!corpusStore) corpus.dispose(); clearTimeout(toastTimer); clearTimeout(sliderTimer); listeners.forEach(remove => remove()); } };
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
