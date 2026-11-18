@@ -168,9 +168,9 @@ export function createExplorer({ document: doc, snapshots = [], eras = [], sourc
     body.scrollTop = 0;
   }
   function selectScene(snapshot, place) {
+    close();
     onSelectSnapshot(snapshot.id);
     if (place && typeof onOpenPlace === 'function') onOpenPlace(place);
-    close();
   }
   function appendMainRecordAction(record, target) {
     if (typeof onOpenRecord !== 'function') return;
@@ -475,7 +475,7 @@ export function createExplorer({ document: doc, snapshots = [], eras = [], sourc
       }
       route.append(list);
     } else route.append(element('p', '', '확인된 활동 지점이 없어 지도에 경로를 표시하지 않습니다.'));
-    const routeButton = button('활동 지점 지도에서 보기', '', () => { onRoute(figure); close(); });
+    const routeButton = button('활동 지점 지도에서 보기', '', () => { close(); onRoute(figure); });
     routeButton.dataset.action = 'show-route';
     routeButton.dataset.entityId = figure.id;
     routeButton.disabled = !stops.length;

@@ -16,7 +16,7 @@ const records = [
 ].map(record => ({ ...record, sourceUrl: 'https://db.history.go.kr/id/tcct_1945_08_15_0010', sourceLinkType: 'article' }));
 const manifest = { recordCount: 212574, collections: [{ id: 'ancient', label: '고대 자료', count: 1 }, { id: 'modern', label: '현대 자료', count: 3 }], coverage: { fromYear: -2333, toYear: 2010 }, dataset: { provider: '국사편찬위원회', title: '연표', landingUrl: 'https://www.data.go.kr/data/15051036/fileData.do', license: { name: '공공누리 제1유형', url: 'https://www.kogl.or.kr/info/licenseType1.do', attribution: '국사편찬위원회' } } };
 const flush = async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve)); };
-async function setup(hash = '', overrides = {}) {
+async function setup(hash = '#records', overrides = {}) {
   const { document, window } = parseHTML(html);
   document.querySelectorAll('input[type=checkbox]').forEach(node => { node.checked = node.hasAttribute('checked'); });
   window.location = { hash, href: `https://example.org/${hash}` };
@@ -29,7 +29,7 @@ async function setup(hash = '', overrides = {}) {
   return { document, window, atlas, submit };
 }
 
-test('main defaults to actual records and next traverses distinct records in the same year without invented map points', async () => {
+test('the main record view traverses distinct records in the same year without invented map points', async () => {
   const { document, atlas } = await setup();
   assert.equal(atlas.state.mode, 'records');
   assert.match(document.querySelector('#browse-records').textContent, /212,574/);
@@ -118,7 +118,7 @@ test('slider and archive main button select individual records and close the arc
 test('finishing a background record load cannot replace a scene selected while it was loading', async () => {
   let release;
   const index = createCorpusIndex(records);
-  const { document, atlas, window } = await setup('', { query: query => new Promise(resolve => { release = () => resolve(index.query(query)); }) });
+  const { document, atlas, window } = await setup('#records', { query: query => new Promise(resolve => { release = () => resolve(index.query(query)); }) });
   assert.equal(atlas.recordBrowser.state.status, 'loading');
   document.querySelector('#browse-scenes').click();
   const sceneTitle = document.querySelector('#chronicle-title').textContent;

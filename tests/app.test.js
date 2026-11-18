@@ -78,17 +78,57 @@ test('a failed basemap request leaves the chronology usable and exposes a status
   atlas.destroy();
 });
 
-test('the 1919 scene frames Shanghai inside the map and its location is selectable', async () => {
+test('first visit opens the Korean history map and keeps the record catalogue available', async () => {
+  const { document, window, atlas } = await setup({ hash: '' });
+  assert.equal(atlas.state.mode, 'scenes');
+  assert.equal(window.location.hash, '#hanyang-1394');
+  assert.match(document.querySelector('.brand').textContent, /한국사 지도/);
+  assert.match(document.querySelector('#chronicle-title').textContent, /한양/);
+  assert.ok(document.querySelector('.map-marker[data-place-id]'));
+  assert.match(document.querySelector('#browse-records').textContent, /1건/);
+  atlas.destroy();
+});
+
+test('the 1919 scene keeps Seoul in view and moves to Shanghai only after an explicit place selection', async () => {
   const { document, atlas } = await setup();
   const index = SNAPSHOTS.findIndex(snapshot => snapshot.year === 1919);
   atlas.selectSnapshot(index);
   const shanghai = SNAPSHOTS[index].places.find(place => place.siteId === 'shanghai' || place.name === '상하이');
   const point = project(shanghai.coord);
+  assert.deepEqual([atlas.state.x, atlas.state.y, atlas.state.zoom], [0, 0, 1]);
+  const button = document.querySelector('#overseas-places .overseas-place-button');
+  assert.match(button.textContent, /상하이.*대한민국 임시정부/);
+  const marker = document.querySelector(`[data-place-id="${shanghai.id}"]`);
+  assert.equal(marker.getAttribute('tabindex'), '-1');
+  button.click();
   const { x, y, zoom } = atlas.state;
   assert.ok(point[0] * zoom + x > 40 && point[0] * zoom + x < 900);
   assert.ok(point[1] * zoom + y > 100 && point[1] * zoom + y < 810);
-  document.querySelector(`[data-place-id="${shanghai.id}"]`).dispatchEvent(new document.defaultView.Event('click'));
   assert.match(document.querySelector('#place-popup').textContent, /상하이/);
+  assert.equal(marker.getAttribute('tabindex'), '0');
+  assert.match(document.querySelector('#map-view-label').textContent, /상하이/);
+  document.querySelector('#return-to-peninsula').click();
+  assert.deepEqual([atlas.state.x, atlas.state.y, atlas.state.zoom], [0, 0, 1]);
+  assert.equal(document.querySelector('#map-view-status').hidden, true);
+  atlas.destroy();
+});
+
+test('playback through overseas independence scenes does not shift the map away from the peninsula', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const { document, atlas } = await setup();
+  const index = SNAPSHOTS.findIndex(snapshot => snapshot.year === 1932);
+  atlas.selectSnapshot(index - 1);
+  document.querySelector('#play').click();
+  t.mock.timers.tick(3500);
+  assert.equal(atlas.state.index, index);
+  assert.deepEqual([atlas.state.x, atlas.state.y, atlas.state.zoom], [0, 0, 1]);
+  assert.match(document.querySelector('#overseas-places').textContent, /상하이/);
+  assert.equal(document.querySelector('#map-view-status').hidden, true);
+  const chongqingIndex = SNAPSHOTS.findIndex(snapshot => snapshot.year === 1940);
+  t.mock.timers.tick((chongqingIndex - index) * 3500);
+  assert.equal(atlas.state.index, chongqingIndex);
+  assert.deepEqual([atlas.state.x, atlas.state.y, atlas.state.zoom], [0, 0, 1]);
+  assert.match(document.querySelector('#overseas-places').textContent, /충칭/);
   atlas.destroy();
 });
 

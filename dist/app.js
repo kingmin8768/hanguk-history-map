@@ -10,6 +10,12 @@ import { createDistributionView } from './distribution-view.js';
 import { READING_PATHS } from './reading-paths-data.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+const atlasTitle = '한국사 지도';
+const homeSceneIndex = SNAPSHOTS.findIndex(snapshot => snapshot.id === 'hanyang-1394');
+
+function insideMapFrame([x, y]) {
+  return x >= 24 && x <= 976 && y >= 24 && y <= 876;
+}
 
 export async function initAtlas({ document: doc, window: win, fetch: fetchResource, corpusStore }) {
   const $ = selector => doc.querySelector(selector);
@@ -20,7 +26,8 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
   const polityById = new Map(polities.map(polity => [polity.id, polity]));
   const cityByPlace = new Map();
   for (const city of buildCityHistories(SNAPSHOTS)) for (const record of city.records) cityByPlace.set(record.place, city);
-  const state = { mode: null, index: Math.max(0, SNAPSHOTS.findIndex(snapshot => snapshot.year === 698)), playing: false, zoom: 1, x: 0, y: 0, selectedPlace: null, selectedFigure: null };
+  const state = { mode: null, index: Math.max(0, homeSceneIndex), playing: false, zoom: 1, x: 0, y: 0, selectedPlace: null, selectedFigure: null };
+  const markerPositions = new WeakMap();
   let explorer, recordBrowser, recordView;
   const corpus = corpusStore || createCorpusStore({ fetchResource });
   let destroyed = false;
@@ -156,18 +163,46 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
   }
   function updateCamera() {
     $('#map-camera').setAttribute('transform', `translate(${state.x} ${state.y}) scale(${state.zoom})`);
+    doc.querySelectorAll('.map-marker, .figure-route-stop').forEach(updateMarkerVisibility);
   }
-  function fitPoints(points, always = false) {
-    state.zoom = 1; state.x = 0; state.y = 0;
-    if (points.length && (always || points.some(([x, y]) => x < 200 || x > 850 || y < 160 || y > 780))) {
-      const xs = points.map(point => point[0]); const ys = points.map(point => point[1]);
-      const left = Math.min(...xs); const right = Math.max(...xs);
-      const top = Math.min(...ys); const bottom = Math.max(...ys);
-      state.zoom = Math.min(1, 650 / Math.max(right - left, 1), 580 / Math.max(bottom - top, 1));
-      state.x = 525 - (left + right) / 2 * state.zoom;
-      state.y = 450 - (top + bottom) / 2 * state.zoom;
-    }
+  function isOnScreen([x, y]) {
+    return insideMapFrame([x * state.zoom + state.x, y * state.zoom + state.y]);
+  }
+  function updateMarkerVisibility(marker) {
+    const visible = isOnScreen(markerPositions.get(marker));
+    marker.setAttribute('tabindex', visible ? '0' : '-1');
+    marker.setAttribute('aria-hidden', String(!visible));
+    marker.setAttribute('visibility', visible ? 'visible' : 'hidden');
+  }
+  function setMapViewLabel(label) {
+    $('#map-view-label').textContent = label;
+    $('#map-view-status').hidden = !label;
+  }
+  function resetMapView() {
+    state.zoom = 1;
+    state.x = 0;
+    state.y = 0;
+    setMapViewLabel('');
     updateCamera();
+  }
+  function fitPoints(points) {
+    const xs = points.map(point => point[0]); const ys = points.map(point => point[1]);
+    const left = Math.min(...xs); const right = Math.max(...xs);
+    const top = Math.min(...ys); const bottom = Math.max(...ys);
+    state.zoom = Math.min(1, 650 / Math.max(right - left, 1), 580 / Math.max(bottom - top, 1));
+    state.x = 525 - (left + right) / 2 * state.zoom;
+    state.y = 450 - (top + bottom) / 2 * state.zoom;
+    updateCamera();
+  }
+  function showPlaceOnMap(place) {
+    stop();
+    const point = project(place.coord);
+    if (!insideMapFrame(point)) {
+      fitPoints([point]);
+      setMapViewLabel(`${place.name} · ${place.polity}`);
+    } else if (!isOnScreen(point)) resetMapView();
+    showPlace(place);
+    $('#map').focus();
   }
   function clearFigureRoute(refit = true) {
     state.selectedFigure = null;
@@ -176,7 +211,7 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
     $('.map-panel').classList.remove('has-active-route');
     if (refit && state.mode === 'scenes') {
       closePopup();
-      fitPoints(SNAPSHOTS[state.index].places.map(place => project(place.coord)));
+      resetMapView();
       writeSceneHash(SNAPSHOTS[state.index]);
     }
   }
@@ -197,6 +232,7 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
       placed.push([x, y]);
       if (x !== anchorX || y !== anchorY) layer.append(svgElement('path', { class: 'marker-connector', d: `M${anchorX},${anchorY}L${x},${y}`, fill: 'none', 'aria-hidden': 'true' }));
       const marker = svgElement('g', { class: 'figure-route-stop', transform: `translate(${x} ${y})`, role: 'button', tabindex: '0', 'aria-label': `${index + 1}. ${figure.name} · ${formatYear(routeStop.year)} · ${routeStop.label}` });
+      markerPositions.set(marker, [x, y]);
       marker.append(svgElement('circle', { r: '13' }));
       const number = svgElement('text', { class: 'figure-route-number', 'text-anchor': 'middle', y: '4' });
       number.textContent = String(index + 1);
@@ -208,7 +244,8 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
       marker.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); show(); } });
       layer.append(marker);
     }
-    fitPoints(stops.map(stop => project(stop.coord)), true);
+    fitPoints(stops.map(stop => project(stop.coord)));
+    setMapViewLabel(`${figure.name} · 활동 지점 지도`);
     $('#active-route-name').textContent = `${figure.name} · 활동 지점 ${stops.length}곳`;
     $('#active-route-description').textContent = `${formatYear(stops[0].year)} — ${formatYear(stops.at(-1).year)} · 연대순 연결선이며 실제 이동 경로가 아닙니다.`;
     $('#active-route').hidden = false;
@@ -254,6 +291,8 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
         markers.append(svgElement('path', { class: 'marker-connector', d: `M${anchorX},${anchorY}L${x},${y}`, fill: 'none', 'aria-hidden': 'true' }));
       }
       const marker = svgElement('g', { class: `map-marker ${place.kind}`, transform: `translate(${x} ${y})`, tabindex: '0', role: 'button', 'data-place-id': place.id, 'aria-pressed': String(state.selectedPlace === place.id), 'aria-label': `${place.name}, ${place.polity}, ${place.kind === 'capital' ? '수도' : '사건·거점'}. 설명 열기` });
+      markerPositions.set(marker, [x, y]);
+      updateMarkerVisibility(marker);
       marker.style.setProperty('--marker-color', place.color || snapshot.color);
       marker.append(svgElement('circle', { class: 'marker-halo', r: place.kind === 'capital' ? '18' : '14' }));
       if (place.kind === 'capital') marker.append(svgElement('path', { class: 'marker-dot', d: 'M0 -6L6 0L0 6L-6 0Z' }));
@@ -312,6 +351,16 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
     $('#chronicle-title').textContent = snapshot.title;
     $('#chronicle-kicker').textContent = snapshot.kicker;
     $('#chronicle-summary').textContent = snapshot.summary;
+    const outsideMap = snapshot.places.filter(place => !insideMapFrame(project(place.coord)));
+    const outsidePanel = $('#overseas-places');
+    outsidePanel.hidden = !outsideMap.length;
+    const outsideList = $('#overseas-place-list');
+    outsideList.replaceChildren();
+    for (const place of outsideMap) {
+      const button = element('button', 'overseas-place-button', `${place.name} · ${place.polity} 지도에서 보기 ↗`);
+      button.addEventListener('click', () => showPlaceOnMap(place));
+      outsideList.append(button);
+    }
     $('#historical-note').textContent = snapshot.note;
     $('#historical-note').hidden = !snapshot.note;
     $('#scene-tags').replaceChildren(...(snapshot.tags || []).map(tag => element('span', 'tag-chip', tag)));
@@ -330,7 +379,7 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
         const place = snapshot.places.find(candidate => candidate.id === event.placeId);
         if (place) {
           const button = element('button', 'text-button event-map-link', '지도에서 보기 ↗');
-          button.addEventListener('click', () => { showPlace(place); $('#map').focus(); });
+          button.addEventListener('click', () => showPlaceOnMap(place));
           card.append(button);
         }
       }
@@ -342,7 +391,7 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
       const card = element('article', 'place-card');
       const button = element('button', 'place-title', `${place.kind === 'capital' ? '◆' : '●'} ${place.name}`);
       button.style.setProperty('--marker-color', place.color || snapshot.color);
-      button.addEventListener('click', () => { showPlace(place); $('#map').focus(); });
+      button.addEventListener('click', () => showPlaceOnMap(place));
       card.append(element('span', 'eyebrow', place.polity), button, element('p', 'place-modern-name', place.modernName || ''), element('p', 'place-note', place.note));
       const links = element('div', 'event-sources');
       sourceLinks(place.sourceIds, links, true);
@@ -412,7 +461,7 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
       clearFigureRoute(false);
       closePopup();
       for (const id of ['marker-layer', 'route-layer', 'map-legend']) $(`#${id}`).replaceChildren();
-      fitPoints([]);
+      resetMapView();
       $('.map-heading .eyebrow').textContent = '공식 자료의 연표';
     } else {
       $('.map-heading .eyebrow').textContent = '역사의 한 장면';
@@ -515,7 +564,7 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
     recordView.render(recordState);
     if (ready) writeRecordHash(recordState);
     if (status === 'error') stop();
-    doc.title = `${hasRecord ? record.title : '전체 기록'} | 산하`;
+    doc.title = `${hasRecord ? record.title : '전체 기록'} | ${atlasTitle}`;
   }
   function openRecords(id = null, filters) {
     stop();
@@ -553,10 +602,10 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
     doc.querySelectorAll('.era-button').forEach(button => button.setAttribute('aria-current', String(button.getAttribute('data-era') === snapshot.era)));
     renderChronicle(snapshot);
     renderMap(snapshot);
-    fitPoints(snapshot.places.map(place => project(place.coord)));
+    resetMapView();
     explorer?.refresh(snapshot);
     writeSceneHash(snapshot);
-    doc.title = `${snapshot.title} · ${formatYear(snapshot.year)} | 산하`;
+    doc.title = `${snapshot.title} · ${formatYear(snapshot.year)} | ${atlasTitle}`;
   }
   function openDialog(dialog) {
     stop();
@@ -722,7 +771,7 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
     onSelectSnapshot: id => { const index = SNAPSHOTS.findIndex(snapshot => snapshot.id === id); if (index >= 0) selectSnapshot(index); },
     onRoute: showFigureRoute,
     onClearRoute: clearFigureRoute,
-    onOpenPlace: showPlace,
+    onOpenPlace: showPlaceOnMap,
     onOpenRecord: (record, filters) => openRecords(record.id, filters),
   });
   recordView = createMainRecordView({ document: doc, target: $('#record-content'), onOpenArchive: (record, filters) => { stop(); explorer.openRecord(record.id, filters); }, onRetry: () => recordBrowser.init() });
@@ -791,7 +840,7 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
         else if (result.polity) openExplorer('polities', result.polity.id);
         else {
           selectSnapshot(SNAPSHOTS.indexOf(result.snapshot));
-          if (result.place) showPlace(result.place);
+          if (result.place) showPlaceOnMap(result.place);
           if (result.event) {
             switchTab('events');
             const card = [...doc.querySelectorAll('#events-content .event-card')].find(node => node.dataset.eventTitle === result.event.title && node.dataset.eventYear === String(result.event.year));
@@ -832,7 +881,17 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
   });
   on($('#zoom-in'), 'click', () => zoomTo(state.zoom * 1.25));
   on($('#zoom-out'), 'click', () => zoomTo(state.zoom / 1.25));
-  on($('#map-reset'), 'click', () => { state.zoom = 1; state.x = 0; state.y = 0; updateCamera(); });
+  function returnToPeninsula() {
+    closePopup();
+    resetMapView();
+  }
+  on($('#map-reset'), 'click', returnToPeninsula);
+  on($('#return-to-peninsula'), 'click', () => { returnToPeninsula(); $('#map-reset').focus(); });
+  on($('.brand'), 'click', event => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    selectSnapshot(homeSceneIndex);
+  });
   let drag = null;
   on($('#map'), 'pointerdown', event => {
     if (event.target.closest('[role="button"]') || event.button > 0) return;
@@ -865,7 +924,8 @@ export async function initAtlas({ document: doc, window: win, fetch: fetchResour
   function readHash() {
     const [id, query = ''] = win.location.hash.replace(/^#/, '').split('?');
     const params = new URLSearchParams(query);
-    if (!id || id === 'records') return { records: true, id: params.get('record'), filters: { q: params.get('q') || '', collection: params.get('collection') || 'all', fromYear: params.get('from'), toYear: params.get('to'), sort: params.get('sort') || 'asc' } };
+    if (id === 'records') return { records: true, id: params.get('record'), filters: { q: params.get('q') || '', collection: params.get('collection') || 'all', fromYear: params.get('from'), toYear: params.get('to'), sort: params.get('sort') || 'asc' } };
+    if (!id) return { index: homeSceneIndex };
     const path = readingPathById.get(params.get('path'));
     const stopIndex = path?.stops.findIndex(stop => stop.snapshotId === id) ?? -1;
     return {
